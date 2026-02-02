@@ -3,7 +3,6 @@ import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWith
 import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, addDoc, updateDoc, arrayUnion, query, getDocs, where, limit } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 import { EXERCISES } from './data.js';
 
-// CONFIGURACIÓN (Tus claves)
 const firebaseConfig = {
     apiKey: "AIzaSyC5TuyHq_MIkhiIdgjBU6s7NM2nq6REY8U",
     authDomain: "bcn-fitness.firebaseapp.com",
@@ -17,9 +16,7 @@ const appInstance = initializeApp(firebaseConfig);
 const auth = getAuth(appInstance);
 const db = getFirestore(appInstance);
 
-const state = { user: null, profile: null, activeWorkout: null, lastWorkoutData: null, restTimer: null, newRoutine: [], sounds: { beep: document.getElementById('timer-beep') }, currentClientId: null, wakeLock: null, editingRoutineId: null };
-
-// HELPER NORMALIZAR
+const state = { user: null, profile: null, activeWorkout: null, lastWorkoutData: null, restTimer: null, newRoutine: [], sounds: { beep: document.getElementById('timer-beep') }, currentClientId: null, wakeLock: null, editingRoutineId: null, editingUserId: null };
 const normalizeText = (text) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
 const app = {
@@ -46,7 +43,6 @@ const app = {
         document.getElementById('login-form').onsubmit = (e) => { e.preventDefault(); app.login(); };
         document.getElementById('register-form').onsubmit = (e) => { e.preventDefault(); app.register(); };
         
-        // EVENTOS BUSCADOR
         const searchInput = document.getElementById('exercise-search');
         if(searchInput) {
             searchInput.addEventListener('input', (e) => admin.searchExercises(e.target.value));
@@ -54,6 +50,7 @@ const app = {
         }
         document.addEventListener('click', (e) => {
             if(!e.target.closest('.exercise-selector')) document.getElementById('search-results-container')?.classList.add('hidden');
+            if(!e.target.closest('.assign-dropdown')) document.querySelectorAll('.assign-dropdown').forEach(d => d.classList.remove('active'));
         });
     },
     login: async () => { try { await signInWithEmailAndPassword(auth, document.getElementById('login-email').value, document.getElementById('login-password').value); } catch(e) { alert(e.message); } },
@@ -83,6 +80,7 @@ const app = {
         if(viewId === 'dashboard') dashboard.render();
         if(viewId === 'profile') profile.render();
         if(viewId === 'profile' && !document.getElementById('tab-history').classList.contains('hidden')) profile.loadHistory();
+        if(viewId === 'admin') admin.refreshAll();
     },
     showToast: (msg, type='normal') => {
         const div = document.createElement('div'); div.className = `toast ${type}`;
@@ -93,58 +91,35 @@ const app = {
 
 const admin = {
     refreshAll: () => { admin.loadUsers(); admin.renderExistingRoutines(); },
-    
-    // --- BUSCADOR VISUAL ---
     searchExercises: (term) => {
         const container = document.getElementById('search-results-container');
-        if(!container) return; // Seguridad si no existe en HTML
-        container.innerHTML = '';
-        container.classList.remove('hidden');
-        
+        if(!container) return; container.innerHTML = ''; container.classList.remove('hidden');
         const normTerm = normalizeText(term);
-        // Filtrar y mostrar máximo 20 resultados para no colapsar
         const results = EXERCISES.filter(e => normalizeText(e.n).includes(normTerm)).slice(0, 20);
-        
-        if(results.length === 0) {
-            container.innerHTML = '<div style="padding:10px; color:#888">No hay resultados</div>';
-            return;
-        }
-
+        if(results.length === 0) { container.innerHTML = '<div style="padding:10px; color:#888">No hay resultados</div>'; return; }
         results.forEach((ex) => {
-            const realIdx = EXERCISES.indexOf(ex); // Indice real en array principal
-            const div = document.createElement('div');
-            div.className = 'search-result-item';
+            const realIdx = EXERCISES.indexOf(ex);
+            const div = document.createElement('div'); div.className = 'search-result-item';
             div.innerHTML = `<img src="assets/muscles/${ex.img}" alt="${ex.m}"><span>${ex.n}</span>`;
-            div.onclick = () => {
-                admin.addExerciseToRoutine(realIdx);
-                container.classList.add('hidden');
-                document.getElementById('exercise-search').value = '';
-            };
+            div.onclick = () => { admin.addExerciseToRoutine(realIdx); container.classList.add('hidden'); document.getElementById('exercise-search').value = ''; };
             container.appendChild(div);
         });
     },
-
-    addExerciseToRoutine: (idx) => {
-        // 5 SERIES DEFAULT (20-16-16-16-16)
-        state.newRoutine.push({...EXERCISES[idx], defaultSets:[{reps:20},{reps:16},{reps:16},{reps:16},{reps:16}]}); 
-        admin.renderPreview(); 
-    },
-
+    addExerciseToRoutine: (idx) => { state.newRoutine.push({...EXERCISES[idx], defaultSets:[{reps:20},{reps:16},{reps:16},{reps:16},{reps:16}]}); admin.renderPreview(); },
     renderPreview: () => { 
         const div = document.getElementById('admin-routine-preview');
         div.innerHTML = state.newRoutine.map((e, exIdx) => `
-            <div style="background:#222; padding:10px; margin-bottom:5px; border-radius:5px">
-                <div style="display:flex; justify-content:space-between; align-items:center">
+            <div class="routine-edit-row">
+                <div class="routine-edit-header">
                     <div style="display:flex; align-items:center; gap:10px">
-                        <img src="assets/muscles/${e.img}" width="30" height="30" style="border-radius:4px; background:#000">
-                        <strong>${e.n}</strong>
+                        <img src="assets/muscles/${e.img}" class="routine-mini-img"><strong>${e.n}</strong>
                     </div>
                     <span style="color:#ff3b30; cursor:pointer" onclick="window.admin.removeEx(${exIdx})">x</span>
                 </div>
                 <div style="font-size:12px; margin-top:5px; display:flex; align-items:center; gap:10px">
                     <span>${e.defaultSets.length} Series</span>
-                    <button style="padding:2px 8px; background:#444; border:none; color:white; border-radius:4px" onclick="window.admin.modSets(${exIdx}, 1)">+</button>
-                    <button style="padding:2px 8px; background:#444; border:none; color:white; border-radius:4px" onclick="window.admin.modSets(${exIdx}, -1)">-</button>
+                    <button class="action-btn" onclick="window.admin.modSets(${exIdx}, 1)">+</button>
+                    <button class="action-btn" onclick="window.admin.modSets(${exIdx}, -1)">-</button>
                 </div>
             </div>`).join(''); 
     },
@@ -154,27 +129,19 @@ const admin = {
         else if(state.newRoutine[i].defaultSets.length > 1) state.newRoutine[i].defaultSets.pop();
         admin.renderPreview();
     },
-
-    // --- EDICIÓN Y GUARDADO ---
     editRoutine: async (id) => {
-        const docSnap = await getDoc(doc(db, "routines", id));
-        const r = docSnap.data();
-        state.editingRoutineId = id;
-        state.newRoutine = r.exercises;
-        
+        const docSnap = await getDoc(doc(db, "routines", id)); const r = docSnap.data();
+        state.editingRoutineId = id; state.newRoutine = r.exercises;
         document.getElementById('new-routine-name').value = r.name;
         document.getElementById('assign-client-select').value = r.assignedTo;
         document.getElementById('routine-editor-title').innerText = "Editando: " + r.name;
         document.getElementById('save-routine-btn').innerText = "ACTUALIZAR";
         document.getElementById('cancel-edit-btn').classList.remove('hidden');
-        
         admin.renderPreview();
         document.getElementById('routine-editor-card').scrollIntoView({behavior: 'smooth'});
     },
-
     cancelEdit: () => {
-        state.editingRoutineId = null;
-        state.newRoutine = [];
+        state.editingRoutineId = null; state.newRoutine = [];
         document.getElementById('new-routine-name').value = '';
         document.getElementById('assign-client-select').value = '';
         document.getElementById('routine-editor-title').innerText = "Crear Rutina Base";
@@ -182,23 +149,13 @@ const admin = {
         document.getElementById('cancel-edit-btn').classList.add('hidden');
         admin.renderPreview();
     },
-
     saveRoutine: async () => {
-        const name = document.getElementById('new-routine-name').value; 
-        const client = document.getElementById('assign-client-select').value;
+        const name = document.getElementById('new-routine-name').value; const client = document.getElementById('assign-client-select').value;
         if(!name || !client) return alert("Faltan datos");
-        
-        if(state.editingRoutineId) {
-            await updateDoc(doc(db, "routines", state.editingRoutineId), { name, assignedTo: client, exercises: state.newRoutine });
-            alert("Actualizada");
-        } else {
-            await addDoc(collection(db, "routines"), { name, assignedTo: client, exercises: state.newRoutine, createdAt: new Date() });
-            alert("Guardada");
-        }
-        admin.cancelEdit(); 
-        admin.renderExistingRoutines();
+        if(state.editingRoutineId) { await updateDoc(doc(db, "routines", state.editingRoutineId), { name, assignedTo: client, exercises: state.newRoutine }); alert("Actualizada"); } 
+        else { await addDoc(collection(db, "routines"), { name, assignedTo: client, exercises: state.newRoutine, createdAt: new Date() }); alert("Guardada"); }
+        admin.cancelEdit(); admin.renderExistingRoutines();
     },
-
     loadUsers: async () => {
         const div = document.getElementById('admin-users-list'); div.innerHTML = 'Cargando...';
         try {
@@ -209,13 +166,67 @@ const admin = {
             const selectAssign = document.getElementById('assign-client-select'); selectAssign.innerHTML = '<option disabled selected>Selecciona...</option>';
             snap.forEach(d => {
                 const u = d.data(); state.allClients.push({id:d.id, ...u});
-                div.innerHTML += `<div class="user-row" onclick="window.admin.viewClient('${d.id}')"><img src="${u.photoURL||'assets/placeholder-body.png'}" class="user-avatar-small"><div class="user-info"><h5>${u.name} <span class="routine-count-badge">[${rCounts[d.id]||0} Rutinas]</span></h5><span>${u.clientType||'Cliente'}</span></div><div class="user-actions">${!u.approved ? `<button class="action-btn btn-green" onclick="window.admin.toggleApproval('${d.id}', true)">APROBAR</button>` : ''}<button class="action-btn btn-delete" onclick="window.admin.deleteUser('${d.id}', '${u.name}')"><i class="material-icons-round" style="font-size:14px">delete</i></button></div></div>`;
+                div.innerHTML += `<div class="user-row"><img src="${u.photoURL||'https://placehold.co/100x100/333/39ff14?text=IMG'}" class="user-avatar-small" onclick="window.admin.viewClient('${d.id}')"><div class="user-info" onclick="window.admin.viewClient('${d.id}')"><h5>${u.name} <span class="routine-count-badge">[${rCounts[d.id]||0} Rutinas]</span></h5><span>${u.clientType||'Cliente'}</span></div><div class="user-actions"><button class="action-btn" onclick="window.admin.openEditUser('${d.id}')"><i class="material-icons-round">edit</i></button><button class="action-btn btn-delete" onclick="window.admin.deleteUser('${d.id}', '${u.name}')"><i class="material-icons-round">delete</i></button></div></div>`;
                 selectAssign.innerHTML += `<option value="${d.id}">${u.name}</option>`;
             });
         } catch(e) { div.innerHTML = 'Error usuarios'; }
     },
+    openEditUser: (id) => {
+        const u = state.allClients.find(c => c.id === id); if(!u) return;
+        state.editingUserId = id;
+        document.getElementById('edit-user-name').value = u.name;
+        document.getElementById('edit-user-role').value = u.clientType || 'cliente';
+        document.getElementById('edit-user-modal').classList.remove('hidden');
+    },
+    saveUserChanges: async () => {
+        const name = document.getElementById('edit-user-name').value;
+        const role = document.getElementById('edit-user-role').value;
+        if(state.editingUserId) {
+            await updateDoc(doc(db, "users", state.editingUserId), { name: name, clientType: role, role: (role==='coach'?'coach':'athlete') });
+            alert("Guardado"); document.getElementById('edit-user-modal').classList.add('hidden'); admin.loadUsers();
+        }
+    },
     deleteUser: async (uid, name) => { if(confirm(`¿Eliminar a ${name}?`)) { await deleteDoc(doc(db, "users", uid)); admin.loadUsers(); } },
-    toggleApproval: async (uid, st) => { await updateDoc(doc(db, "users", uid), { approved: st }); admin.loadUsers(); },
+    renderExistingRoutines: async () => {
+        const div = document.getElementById('admin-routines-management'); div.innerHTML = 'Cargando...';
+        const snap = await getDocs(collection(db, "routines")); div.innerHTML = '';
+        const seen = new Set();
+        snap.forEach(d => {
+            const r = d.data();
+            if(!seen.has(r.name)) {
+                seen.add(r.name);
+                div.innerHTML += `
+                    <div class="exercise-card" style="border-left: 4px solid var(--neon-green); position:relative">
+                        <div style="display:flex; justify-content:space-between; align-items:center">
+                            <h4>${r.name}</h4>
+                            <div style="display:flex; gap:10px">
+                                <i class="material-icons-round" style="cursor:pointer; color:white" onclick="window.admin.toggleAssignMenu('${d.id}')">ios_share</i>
+                                <button style="background:none; border:none; color:white; cursor:pointer; font-weight:bold" onclick="window.admin.showRoutineDetails('${d.id}')">VER</button>
+                                <button style="background:none; border:none; color:var(--neon-green); cursor:pointer; font-weight:bold" onclick="window.admin.editRoutine('${d.id}')">EDITAR</button>
+                            </div>
+                        </div>
+                        <div style="font-size:12px; color:#aaa; margin-top:5px">${r.exercises.length} Ejercicios</div>
+                        <div id="assign-menu-${d.id}" class="assign-dropdown">
+                            <input type="text" placeholder="Buscar cliente..." onkeyup="window.admin.filterAssignList(this, '${d.id}')">
+                            <div class="assign-list" id="assign-list-${d.id}"></div>
+                        </div>
+                    </div>`;
+            }
+        });
+    },
+    toggleAssignMenu: (rid) => {
+        const menu = document.getElementById(`assign-menu-${rid}`);
+        const list = document.getElementById(`assign-list-${rid}`);
+        if(menu.style.display === 'block') { menu.style.display = 'none'; return; }
+        document.querySelectorAll('.assign-dropdown').forEach(d => d.style.display = 'none');
+        menu.style.display = 'block';
+        list.innerHTML = state.allClients.map(c => `<div class="assign-item" onclick="window.admin.cloneRoutine('${rid}', '${c.id}')">${c.name}</div>`).join('');
+    },
+    filterAssignList: (input, rid) => {
+        const term = input.value.toLowerCase();
+        const list = document.getElementById(`assign-list-${rid}`);
+        list.innerHTML = state.allClients.filter(c => c.name.toLowerCase().includes(term)).map(c => `<div class="assign-item" onclick="window.admin.cloneRoutine('${rid}', '${c.id}')">${c.name}</div>`).join('');
+    },
     viewClient: async (uid) => {
         state.currentClientId = uid;
         const user = state.allClients.find(c => c.id === uid); if(!user) return;
@@ -261,28 +272,6 @@ const admin = {
         all.forEach(d => { if(d.data().assignedTo !== uid && !seen.has(d.data().name)) { seen.add(d.data().name); sel.innerHTML += `<option value="${d.id}">${d.data().name}</option>`; } });
     },
     cloneRoutineFromClientView: async () => { const rid = document.getElementById('client-clone-select').value; if(!rid) return; admin.cloneRoutine(rid, state.currentClientId); },
-    renderExistingRoutines: async () => {
-        const div = document.getElementById('admin-routines-management'); div.innerHTML = 'Cargando...';
-        const snap = await getDocs(collection(db, "routines")); div.innerHTML = '';
-        const seen = new Set();
-        snap.forEach(d => {
-            const r = d.data();
-            if(!seen.has(r.name)) {
-                seen.add(r.name);
-                div.innerHTML += `
-                    <div class="exercise-card" style="border-left: 4px solid var(--neon-green)">
-                        <div style="display:flex; justify-content:space-between; align-items:center">
-                            <h4>${r.name}</h4>
-                            <div style="display:flex; gap:10px">
-                                <button style="background:none; border:none; color:white; cursor:pointer; font-weight:bold" onclick="window.admin.showRoutineDetails('${d.id}')">VER</button>
-                                <button style="background:none; border:none; color:var(--neon-green); cursor:pointer; font-weight:bold" onclick="window.admin.editRoutine('${d.id}')">EDITAR</button>
-                            </div>
-                        </div>
-                        <div style="font-size:12px; color:#aaa; margin-top:5px">${r.exercises.length} Ejercicios</div>
-                    </div>`;
-            }
-        });
-    },
     showRoutineDetails: async (rid) => {
         const snap = await getDoc(doc(db, "routines", rid)); const r = snap.data();
         const modal = document.getElementById('workout-detail-modal');
@@ -359,11 +348,11 @@ const workoutManager = {
                 if(state.lastWorkoutData && state.lastWorkoutData.exercises[idx] && state.lastWorkoutData.exercises[idx].sets[i]) {
                     const p = state.lastWorkoutData.exercises[idx].sets[i]; prev = `${p.reps}x${p.kg}`;
                 }
-                const bg = s.done ? 'set-completed' : ''; // Clase para el contenedor
-                const dis = s.done ? 'disabled' : ''; // Atributo para inputs
+                const bg = s.done ? 'set-completed' : ''; 
+                const dis = s.done ? 'disabled' : ''; 
                 
                 html += `
-                <div class="set-row ${bg}">
+                <div id="set-row-${idx}-${i}" class="set-row ${bg}">
                     <span style="color:#555">#${i+1}</span>
                     <span style="font-size:10px; color:#888">${prev}</span>
                     <input type="number" placeholder="reps" value="${s.reps}" ${dis} onchange="window.workoutManager.updateSet(${idx},${i},'reps',this.value)">
@@ -383,6 +372,19 @@ const workoutManager = {
     updateSet: (ei, si, f, v) => { state.activeWorkout.exercises[ei].sets[si][f] = v; localStorage.setItem(`bcn_workout_${state.user.uid}`, JSON.stringify(state.activeWorkout)); },
     toggleSet: (ei, si) => {
         const s = state.activeWorkout.exercises[ei].sets[si]; s.done = !s.done;
+        // FAST UPDATE UI
+        const row = document.getElementById(`set-row-${ei}-${si}`);
+        if(row) {
+            if(s.done) {
+                row.classList.add('set-completed');
+                row.querySelector('.check-box').classList.add('checked');
+                row.querySelectorAll('input').forEach(i => i.disabled=true);
+            } else {
+                row.classList.remove('set-completed');
+                row.querySelector('.check-box').classList.remove('checked');
+                row.querySelectorAll('input').forEach(i => i.disabled=false);
+            }
+        }
         if(s.done) {
             if(state.sounds.beep) state.sounds.beep.play().catch(e=>{});
             workoutManager.startRest(state.profile.settings?.restTime || 60);
@@ -398,7 +400,7 @@ const workoutManager = {
                 }
             }
         }
-        workoutManager.saveLocal(); workoutManager.uiInit();
+        workoutManager.saveLocal();
     },
     startRest: (sec) => {
         document.getElementById('rest-modal').classList.remove('hidden');
@@ -432,7 +434,6 @@ const workoutManager = {
 const profile = {
     render: () => {
         document.getElementById('profile-name').innerText = state.profile.name;
-        // PHOTO DOM UPDATE IMMEDIATE
         const img = document.getElementById('profile-img');
         if(state.profile.photoURL) img.src = state.profile.photoURL;
         
@@ -440,8 +441,40 @@ const profile = {
         document.getElementById('conf-weekly-goal').value = state.profile.settings?.weeklyGoal || 3;
         document.getElementById('conf-rest-time').value = state.profile.settings?.restTime || 60;
         profile.renderCharts(); profile.loadRadar();
+        profile.calculateGlobalStats(); 
         profile.switchTab('stats');
     },
+    
+    // --- ESTA ES LA FUNCION QUE FALTABA PARA SUMAR TONELADAS Y SERIES ---
+    calculateGlobalStats: async () => {
+        try {
+            const q = query(collection(db, "workouts"), where("userId", "==", state.user.uid));
+            const snap = await getDocs(q);
+            let totalTonnage = 0, totalSets = 0, totalReps = 0;
+            const totalWorkouts = snap.size;
+
+            snap.forEach(doc => {
+                const w = doc.data();
+                if(w.data && w.data.exercises) {
+                    w.data.exercises.forEach(ex => {
+                        ex.sets.forEach(s => {
+                            if(s.done && s.kg && s.reps) {
+                                totalSets++;
+                                totalReps += parseInt(s.reps);
+                                totalTonnage += (parseInt(s.kg) * parseInt(s.reps));
+                            }
+                        });
+                    });
+                }
+            });
+
+            document.getElementById('stat-tonnage').innerText = (totalTonnage/1000).toFixed(1) + 't';
+            document.getElementById('stat-sets').innerText = totalSets;
+            document.getElementById('stat-reps').innerText = totalReps;
+            document.getElementById('stat-workouts').innerText = totalWorkouts;
+        } catch(e) { console.error("Stats calc error", e); }
+    },
+
     switchTab: (tab) => {
         ['stats', 'history', 'config'].forEach(t => {
             document.getElementById(`tab-${t}`).classList.add('hidden');
@@ -505,9 +538,20 @@ const profile = {
         const reader = new FileReader();
         reader.onload = async (e) => {
             const base64 = e.target.result;
-            document.getElementById('profile-img').src = base64;
-            state.profile.photoURL = base64;
-            await updateDoc(doc(db, "users", state.user.uid), { photoURL: base64 });
+            const img = new Image();
+            img.src = base64;
+            img.onload = async () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const scale = 300 / img.width;
+                canvas.width = 300;
+                canvas.height = img.height * scale;
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                const compressed = canvas.toDataURL('image/jpeg', 0.7);
+                document.getElementById('profile-img').src = compressed;
+                state.profile.photoURL = compressed;
+                await updateDoc(doc(db, "users", state.user.uid), { photoURL: compressed });
+            };
         };
         reader.readAsDataURL(file);
     },
@@ -515,6 +559,7 @@ const profile = {
     renderCharts: () => {
         const history = state.profile.statsHistory || [];
         history.sort((a,b) => (a.date.seconds || new Date(a.date)) - (b.date.seconds || new Date(b.date)));
+        
         if(window.chartHelpers) {
             window.chartHelpers.renderLine('weightChart', history, 'weight', '#39ff14');
             window.chartHelpers.renderLine('fatChart', history, 'fat', '#ff3b30');
