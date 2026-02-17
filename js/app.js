@@ -4,7 +4,7 @@ import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, onSnapshot, q
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 import { EXERCISES } from './data.js';
 
-console.log("⚡ FIT DATA: App v11.1 (Graphic UI Fixes)...");
+console.log("⚡ FIT DATA: App v11.3 (Ordered Routines + Active Avatar)...");
 
 const firebaseConfig = {
   apiKey: "AIzaSyDW40Lg6QvBc3zaaA58konqsH3QtDrRmyM",
@@ -95,7 +95,7 @@ if (isIos() && !isInStandaloneMode()) {
     if(container && iosHint) { container.classList.remove('hidden'); iosHint.classList.remove('hidden'); }
 }
 
-// --- TELEGRAM & UI INJECTION (CON ICONO REAL SVG) ---
+// --- TELEGRAM & UI INJECTION ---
 function injectTelegramUI() {
     const regForm = document.getElementById('register-form');
     const regEmail = document.getElementById('reg-email');
@@ -225,7 +225,7 @@ window.switchCoachSubTab = (tabName) => {
     const content = document.getElementById(`ctab-content-${tabName}`); if(content) content.classList.remove('hidden');
 };
 
-// --- CHART HELPERS WITH DATE FILTER & FIXES ---
+// --- CHART HELPERS ---
 function renderFilteredChart(canvasId, instanceVar, dataHistory, typeKey, color, rangeDays = 9999) {
     const ctx = document.getElementById(canvasId); 
     if (!ctx) return null; 
@@ -234,7 +234,6 @@ function renderFilteredChart(canvasId, instanceVar, dataHistory, typeKey, color,
     const now = Date.now(); 
     const cutoff = now - (rangeDays * 24 * 60 * 60 * 1000);
 
-    // Seguridad para datos antiguos
     const safeData = Array.isArray(dataHistory) ? dataHistory.filter(d => {
         return d && typeof d === 'object' && d.date && typeof d.date.seconds === 'number';
     }) : [];
@@ -264,7 +263,7 @@ function renderFilteredChart(canvasId, instanceVar, dataHistory, typeKey, color,
         }, 
         options: { 
             maintainAspectRatio: false, 
-            layout: { padding: { top: 10, bottom: 5, left: 5, right: 10 } }, // AIR FIX
+            layout: { padding: { top: 10, bottom: 5, left: 5, right: 10 } },
             plugins: { legend: { display: false } }, 
             scales: { 
                 x: { display: true, ticks: { color: '#666', maxRotation: 45, minRotation: 0, font: {size: 10} }, grid: { display: false } }, 
@@ -281,7 +280,6 @@ function injectChartFilter(canvasId, callbackName) {
     parent.insertBefore(div, canvas);
 }
 
-// --- NUEVAS FUNCIONES PARA MEDIDAS DINÁMICAS ---
 window.updateMeasureChart = (id, range) => {
     const sourceData = (id === 'coachMeasuresChart') ? selectedUserObj.measureHistory : userData.measureHistory;
     const instance = (id === 'coachMeasuresChart') ? coachMeasureChart : measureChartInstance;
@@ -313,12 +311,12 @@ window.loadProfile = async () => {
 
     if(userData.rankingOptIn) { document.getElementById('cfg-ranking').checked = true; document.getElementById('top-btn-ranking').classList.remove('hidden'); } else { document.getElementById('cfg-ranking').checked = false; document.getElementById('top-btn-ranking').classList.add('hidden'); }
 
+    const fixChartContainer = (id) => { const c = document.getElementById(id); if(c && c.parentElement) { c.parentElement.style.height = '250px'; c.parentElement.style.marginBottom = '35px'; } };
+
     if(userData.showBio) { 
         document.getElementById('user-bio-section').classList.remove('hidden'); 
         if(userData.bioHistory && userData.bioHistory.length > 0) { 
-            // FIX HEIGHT & MARGIN
-            document.querySelector('#user-bio-section canvas').parentElement.style.height = '250px';
-            document.querySelector('#user-bio-section canvas').parentElement.style.marginBottom = '25px';
+            fixChartContainer('chartBio');
             injectChartFilter('chartBio', 'window.updateBioChart'); 
             renderFilteredChart('chartBio', bioChartInstance, userData.bioHistory, 'muscle', '#00ffff', 9999); 
         }
@@ -329,9 +327,7 @@ window.loadProfile = async () => {
     if(userData.showSkinfolds) {
         document.getElementById('user-skinfolds-section').classList.remove('hidden');
         if(userData.skinfoldHistory && userData.skinfoldHistory.length > 0) { 
-            // FIX HEIGHT & MARGIN
-            document.querySelector('#user-skinfolds-section canvas').parentElement.style.height = '250px';
-            document.querySelector('#user-skinfolds-section canvas').parentElement.style.marginBottom = '25px';
+            fixChartContainer('chartFat');
             injectChartFilter('chartFat', 'window.updateFatChart'); 
             fatChartInstance = renderFilteredChart('chartFat', fatChartInstance, userData.skinfoldHistory, 'fat', '#ffaa00', 9999); 
         }
@@ -340,11 +336,8 @@ window.loadProfile = async () => {
     if(userData.showMeasurements) {
         document.getElementById('user-measures-section').classList.remove('hidden');
         if(userData.measureHistory && userData.measureHistory.length > 0) {
-            // FIX HEIGHT & MARGIN
-            document.querySelector('#user-measures-section canvas').parentElement.style.height = '250px';
-            document.querySelector('#user-measures-section canvas').parentElement.style.marginBottom = '25px';
+            fixChartContainer('chartMeasures');
             injectChartFilter('chartMeasures', 'window.updateMeasureChart');
-            // Inicio con 3 MESES para que se vea limpio
             measureChartInstance = renderFilteredMeasureChart('chartMeasures', measureChartInstance, userData.measureHistory, 90);
         }
     } else { document.getElementById('user-measures-section').classList.add('hidden'); }
@@ -359,10 +352,7 @@ window.loadProfile = async () => {
     document.getElementById('stat-reps').innerText = userData.stats?.totalReps || 0;
     
     if(userData.weightHistory) { 
-        // FIX HEIGHT & MARGIN PARA EL PESO
-        const wContainer = document.getElementById('weightChart').parentElement;
-        wContainer.style.height = '250px';
-        wContainer.style.marginBottom = '25px';
+        fixChartContainer('weightChart');
         injectChartFilter('weightChart', 'window.updateWeightChart'); 
         chartInstance = renderFilteredChart('weightChart', chartInstance, userData.weightHistory, 'weight', '#ff3333', 9999); 
     }
@@ -374,11 +364,15 @@ window.loadProfile = async () => {
         const workouts = snap.docs.map(d => ({id:d.id, ...d.data()})).sort((a,b) => b.date - a.date).slice(0, 5);
         histDiv.innerHTML = workouts.length ? '' : "Sin historial.";
         workouts.forEach(d => {
-            let dateStr = '-';
-            if(d.date) { const dateObj = d.date.toDate ? d.date.toDate() : new Date(d.date.seconds*1000); dateStr = dateObj.toLocaleDateString('es-ES', {day:'2-digit', month:'short'}); }
+            let dateStr = '-', timeStr = '';
+            if(d.date) { 
+                const dateObj = d.date.toDate ? d.date.toDate() : new Date(d.date.seconds*1000); 
+                dateStr = dateObj.toLocaleDateString('es-ES', {day:'2-digit', month:'short'}); 
+                timeStr = dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            }
             let rpeColor = 'rpe-easy'; if(d.rpe === 'Duro' || d.rpe === 'Intenso') rpeColor = 'rpe-hard'; if(d.rpe === 'Fallo' || d.rpe === 'Extremo') rpeColor = 'rpe-max';
             const detailsStr = d.details ? encodeURIComponent(JSON.stringify(d.details)) : ""; const noteStr = d.note ? encodeURIComponent(d.note) : "";
-            const btnVer = d.details ? `<button class="btn-small btn-outline" style="margin:0; padding:2px 6px;" onclick="window.viewWorkoutDetails('${d.routine}', '${detailsStr}', '${noteStr}')">🔍</button>` : '';
+            const btnVer = d.details ? `<button class="btn-small btn-outline" style="margin:0; padding:2px 6px;" onclick="window.viewWorkoutDetails('${d.routine}', '${detailsStr}', '${noteStr}', '${timeStr}')">🔍</button>` : '';
             histDiv.innerHTML += `<div class="history-row"><div style="color:var(--accent-color); font-weight:bold;">${dateStr}</div><div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:5px;">${d.routine}</div><div style="display:flex; justify-content:center;"><span class="rpe-dot ${rpeColor}" title="${d.rpe}"></span></div><div style="text-align:right;">${btnVer}</div></div>`;
         });
     } catch(e) { histDiv.innerHTML = "Error."; }
@@ -422,47 +416,30 @@ function getExerciseData(name) {
 function getMuscleInfoByGroup(m) { let s = []; if(m==="Pecho") s=["Tríceps","Hombros"]; else if(m==="Espalda") s=["Bíceps", "Antebrazo"]; else if(m==="Cuádriceps") s=["Glúteos", "Gemelos"]; else if(m==="Isquios") s=["Glúteos", "Espalda Baja"]; else if(m==="Hombros") s=["Tríceps", "Trapecio"]; else if(m==="Bíceps") s=["Antebrazo"]; else if(m==="Tríceps") s=["Hombros", "Pecho"]; else if(m==="Glúteos") s=["Isquios", "Cuádriceps"]; return {main:m, sec:s}; }
 
 async function loadRoutines() {
-    const l = document.getElementById('routines-list'); 
-    l.innerHTML = 'Cargando...';
-    
+    const l = document.getElementById('routines-list'); l.innerHTML = 'Cargando...';
     onSnapshot(query(collection(db,"routines")), (s)=>{
         l.innerHTML = '';
         let myRoutines = [];
-
-        // 1. Filtrar las que son mías
         s.forEach(d=>{
             const r = d.data(); 
             const isAssignedToMe = r.assignedTo && r.assignedTo.includes(currentUser.uid);
-            if(isAssignedToMe){
-                myRoutines.push({id: d.id, ...r});
-            }
+            if(isAssignedToMe){ myRoutines.push({id: d.id, ...r}); }
         });
 
-        // 2. ORDENAR BASADO EN 'routineOrder' DEL USUARIO
-        // Si el usuario tiene un orden guardado, lo usamos.
+        // ORDEN DINÁMICO
         const orderPreference = userData.routineOrder || [];
-        
         myRoutines.sort((a, b) => {
             let indexA = orderPreference.indexOf(a.id);
             let indexB = orderPreference.indexOf(b.id);
-
-            // Si no está en la lista de orden (ej. rutina suelta antigua), la mandamos al final
             if (indexA === -1) indexA = 9999;
             if (indexB === -1) indexB = 9999;
-
             return indexA - indexB;
         });
 
-        // 3. Renderizar
-        if(myRoutines.length === 0) {
-            l.innerHTML = '<div style="padding:20px; text-align:center; color:#666;">No tienes rutinas asignadas.</div>';
-            return;
-        }
+        if(myRoutines.length === 0) { l.innerHTML = '<div style="padding:20px; text-align:center; color:#666;">No tienes rutinas asignadas.</div>'; return; }
 
         myRoutines.forEach(r => {
-            const div = document.createElement('div'); 
-            div.className = 'card'; 
-            const canEdit = r.uid === currentUser.uid;
+            const div = document.createElement('div'); div.className = 'card'; const canEdit = r.uid === currentUser.uid;
             div.innerHTML = `<div style="display:flex; justify-content:space-between;"><h3 style="color:var(--accent-color)">${r.name}</h3><div>${canEdit ? `<button style="background:none;border:none;margin-right:10px;" onclick="openEditor('${r.id}')">✏️</button><button style="background:none;border:none;" onclick="delRoutine('${r.id}')">🗑️</button>` : '🔒'}</div></div><p style="color:#666; font-size:0.8rem; margin:10px 0;">${r.exercises.length} Ejercicios</p><button class="btn" onclick="startWorkout('${r.id}')">ENTRENAR</button>`;
             l.appendChild(div);
         });
@@ -707,7 +684,7 @@ async function compressAndCleanupWorkouts(uid) {
         const q = query(collection(db, "workouts"), where("uid", "==", uid), orderBy("date", "desc"));
         const snapshot = await getDocs(q);
         const docs = snapshot.docs;
-        const KEEP_LIMIT = 30; // 🛡️ SEGURO: Guarda 30 entrenos completos para UX (Ver pesos anteriores)
+        const KEEP_LIMIT = 30; // 🛡️ SEGURO: Guarda 30 entrenos completos para UX
 
         if (docs.length <= KEEP_LIMIT) return; 
 
@@ -845,12 +822,24 @@ window.loadAdminUsers = async () => {
         const usersList = s.docs.map(d => ({id: d.id, ...d.data()}));
         usersList.sort((a, b) => { const dateA = a.lastWorkoutDate ? a.lastWorkoutDate.seconds : 0; const dateB = b.lastWorkoutDate ? b.lastWorkoutDate.seconds : 0; return dateB - dateA; });
         usersList.forEach(u => {
-            const avatarHtml = u.photo ? `<img src="${u.photo}" class="mini-avatar">` : `<div class="mini-avatar-placeholder">${u.name.charAt(0).toUpperCase()}</div>`;
+            // LÓGICA DE ACTIVIDAD (HOY)
+            let activeClass = "";
+            if (u.lastWorkoutDate) { 
+                const last = u.lastWorkoutDate.toDate(); 
+                const today = new Date(); 
+                const isToday = last.getDate() === today.getDate() && last.getMonth() === today.getMonth() && last.getFullYear() === today.getFullYear(); 
+                if (isToday) activeClass = "avatar-active-today"; 
+            }
+
+            const avatarHtml = u.photo 
+                ? `<img src="${u.photo}" class="mini-avatar ${activeClass}">` 
+                : `<div class="mini-avatar-placeholder ${activeClass}">${u.name.charAt(0).toUpperCase()}</div>`;
+            
             let rowClass = "admin-user-row"; if(u.id === currentUser.uid) rowClass += " is-me"; if(u.role === 'assistant') rowClass += " is-coach";
-            let activeStatus = ""; if (u.lastWorkoutDate) { const last = u.lastWorkoutDate.toDate(); const today = new Date(); const isToday = last.getDate() === today.getDate() && last.getMonth() === today.getMonth() && last.getFullYear() === today.getFullYear(); if (isToday) { const timeStr = last.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); activeStatus = `<span style="color:#00ff88; font-size:0.75rem; margin-left:6px; font-weight:bold; background:rgba(0,255,136,0.1); padding:2px 5px; border-radius:4px;">🟢 ${timeStr}</span>`; } }
+            
             const btnNotice = `<button class="btn-outline btn-small" style="margin:0; width:40px; border-color:#ffaa00; color:#ffaa00; display:flex; align-items:center; justify-content:center;" onclick="event.stopPropagation(); window.openNoticeEditor('${u.id}')">📢</button>`;
             const div = document.createElement('div'); div.className = rowClass;
-            div.innerHTML=`${avatarHtml}<div style="overflow:hidden;"><div style="font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:white; display:flex; align-items:center;">${u.name} ${u.role === 'assistant' ? '🛡️' : ''} ${activeStatus}</div><div style="font-size:0.75rem; color:#888; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${u.email}</div></div><div style="display:flex; gap:8px;">${btnNotice}<button class="btn-outline btn-small" style="margin:0; border-color:#444; color:#ccc;" onclick="window.openCoachView('${u.id}', null)">⚙️</button></div>`;
+            div.innerHTML=`${avatarHtml}<div style="overflow:hidden;"><div style="font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:white; display:flex; align-items:center;">${u.name} ${u.role === 'assistant' ? '🛡️' : ''}</div><div style="font-size:0.75rem; color:#888; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${u.email}</div></div><div style="display:flex; gap:8px;">${btnNotice}<button class="btn-outline btn-small" style="margin:0; border-color:#444; color:#ccc;" onclick="window.openCoachView('${u.id}', null)">⚙️</button></div>`;
             l.appendChild(div);
         });
     } catch (e) { l.innerHTML = 'Error de permisos o conexión.'; console.log(e); }
@@ -898,6 +887,7 @@ window.viewPlanContent = async (planName, planId) => { const snap = await getDoc
 window.createPlan = async () => { const name = document.getElementById('new-plan-name').value; const checks = document.querySelectorAll('.plan-check:checked'); if(!name || checks.length === 0) return alert("Pon un nombre y selecciona rutinas"); await addDoc(collection(db, "plans"), { name: name, routines: Array.from(checks).map(c => c.value), createdBy: currentUser.uid }); alert("Plan Creado"); document.getElementById('new-plan-name').value = ''; window.loadAdminPlans(); };
 window.deletePlan = async (id) => { if(confirm("¿Borrar plan?")) { await deleteDoc(doc(db, "plans", id)); window.loadAdminPlans(); } };
 window.openAssignPlanModal = async (planId) => { assignMode = 'plan'; selectedPlanForMassAssign = planId; const list = document.getElementById('assign-users-list'); window.openModal('modal-assign-plan'); try { const snap = await getDoc(doc(db, "plans", planId)); if (snap.exists()) document.getElementById('assign-plan-title').innerText = `Asignar "${snap.data().name}" a:`; let q = userData.role === 'assistant' ? query(collection(db, "users"), where("assignedCoach", "==", currentUser.uid)) : collection(db, "users"); const uSnap = await getDocs(q); list.innerHTML = ''; uSnap.forEach(d => { const u = d.data(); if (u.role === 'athlete') { const div = document.createElement('div'); div.className = "selector-item"; div.innerHTML = `<input type="checkbox" class="user-mass-check selector-checkbox" value="${d.id}" id="u-${d.id}"><label for="u-${d.id}" class="selector-label">${u.name}</label>`; list.appendChild(div); } }); } catch(e) { console.error(e); } };
+
 window.distributePlan = async () => { 
     const checks = document.querySelectorAll('.user-mass-check:checked'); 
     if(checks.length === 0) return alert("Selecciona al menos un cliente."); 
@@ -911,19 +901,18 @@ window.distributePlan = async () => {
             const planData = planSnap.data();
             const routinesList = planData.routines;
 
-            // 1. Actualizar permisos en las rutinas
             const promisesRoutine = routinesList.map(rid => updateDoc(doc(db, "routines", rid), { assignedTo: arrayUnion(...userIds) })); 
             await Promise.all(promisesRoutine); 
 
-            // 2. Actualizar el ORDEN en cada usuario seleccionado
             const promisesUsers = userIds.map(uid => updateDoc(doc(db, "users", uid), { routineOrder: routinesList }));
             await Promise.all(promisesUsers);
 
             alert(`✅ Plan asignado y ordenado correctamente.`); 
         } 
         else if (assignMode === 'routine' && selectedRoutineForMassAssign) { 
-            // Si es rutina suelta, solo asignamos permiso
             await updateDoc(doc(db, "routines", selectedRoutineForMassAssign), { assignedTo: arrayUnion(...userIds) }); 
+            const promisesOrder = userIds.map(uid => updateDoc(doc(db, "users", uid), { routineOrder: arrayUnion(selectedRoutineForMassAssign) }));
+            await Promise.all(promisesOrder);
             alert(`✅ Rutina enviada correctamente.`); 
         } 
         window.closeModal('modal-assign-plan'); 
@@ -933,6 +922,7 @@ window.distributePlan = async () => {
         btn.innerText = "✅ ENVIAR A SELECCIONADOS"; 
     } 
 };
+
 window.viewRoutineContent = (name, dataStr) => { const exs = JSON.parse(decodeURIComponent(dataStr)).map(e => typeof e === 'string' ? e : e.n); let html = `<ul style="padding-left:20px; margin-top:10px;">`; exs.forEach(e => html += `<li style="margin-bottom:5px;">${e}</li>`); html += `</ul>`; document.getElementById('detail-title').innerText = name; document.getElementById('detail-content').innerHTML = html; window.openModal('modal-details'); };
 
 window.openNoticeEditor = async (uid) => { noticeTargetUid = uid; document.getElementById('notice-title').value = ''; document.getElementById('notice-text').value = ''; document.getElementById('notice-img-file').value = ''; document.getElementById('notice-link').value = ''; const modalTitle = document.getElementById('notice-modal-title'); modalTitle.innerText = uid === 'GLOBAL' ? '📢 CREAR AVISO PARA TODOS' : '📢 AVISO INDIVIDUAL'; try { let existing = null; if(uid === 'GLOBAL') { const snap = await getDoc(doc(db, "settings", "globalNotice")); if(snap.exists()) existing = snap.data(); } else { const snap = await getDoc(doc(db, "users", uid)); if(snap.exists() && snap.data().coachNotice) existing = snap.data().coachNotice; } if(existing) { document.getElementById('notice-title').value = existing.title || ''; document.getElementById('notice-text').value = existing.text || ''; document.getElementById('notice-link').value = existing.link || ''; } } catch(e) { console.error(e); } window.openModal('modal-notice-editor'); };
@@ -952,6 +942,7 @@ window.openCoachView = async (uid, u) => {
     document.getElementById('coach-user-meta').innerText = `${freshU.gender === 'female' ? '♀️' : '♂️'} ${freshU.age} años • ${freshU.height} cm`;
     const telegramHtml = freshU.telegram ? `<div style="font-size:0.8rem; color:#0088cc; margin-top:5px;">Telegram: ${freshU.telegram}</div>` : '';
     document.getElementById('coach-user-email').innerHTML += telegramHtml;
+    
     if(freshU.photo) { document.getElementById('coach-user-img').src = freshU.photo; document.getElementById('coach-user-img').style.display = 'block'; document.getElementById('coach-user-initial').style.display = 'none'; }
     else { document.getElementById('coach-user-img').style.display = 'none'; document.getElementById('coach-user-initial').style.display = 'block'; document.getElementById('coach-user-initial').innerText = freshU.name.charAt(0).toUpperCase(); }
     document.getElementById('pending-approval-banner').classList.toggle('hidden', freshU.approved);
@@ -959,39 +950,11 @@ window.openCoachView = async (uid, u) => {
     updateCoachPhotoDisplay('front');
     const coachPhotoCard = document.getElementById('coach-view-photos'); if (coachPhotoCard) { if (freshU.showPhotos === false) { coachPhotoCard.classList.add('hidden'); } else { coachPhotoCard.classList.remove('hidden'); } }
 
-    if(freshU.bioHistory && freshU.showBio) { 
-        document.getElementById('coach-view-bio').classList.remove('hidden'); 
-        if(freshU.bioHistory && freshU.bioHistory.length > 0) { 
-            // FIX HEIGHT & MARGIN
-            document.querySelector('#coach-view-bio canvas').parentElement.style.height = '250px';
-            document.querySelector('#coach-view-bio canvas').parentElement.style.marginBottom = '25px';
-            injectChartFilter('coachBioChart', 'window.updateBioChart'); 
-            renderFilteredChart('coachBioChart', coachBioChart, freshU.bioHistory, 'muscle', '#00ffff', 9999); 
-        }
-    } else { document.getElementById('coach-view-bio').classList.add('hidden'); }
+    const fixCoachChart = (id) => { const c = document.getElementById(id); if(c && c.parentElement) { c.parentElement.style.height = '250px'; c.parentElement.style.marginBottom = '35px'; } };
 
-    if(freshU.skinfoldHistory && freshU.showSkinfolds) { 
-        document.getElementById('coach-view-skinfolds').classList.remove('hidden'); 
-        if(freshU.skinfoldHistory && freshU.skinfoldHistory.length > 0) { 
-            // FIX HEIGHT & MARGIN
-            document.querySelector('#coach-view-skinfolds canvas').parentElement.style.height = '250px';
-            document.querySelector('#coach-view-skinfolds canvas').parentElement.style.marginBottom = '25px';
-            injectChartFilter('coachFatChart', 'window.updateFatChart'); 
-            renderFilteredChart('coachFatChart', coachFatChart, freshU.skinfoldHistory, 'fat', '#ffaa00', 9999); 
-        }
-    } else { document.getElementById('coach-view-skinfolds').classList.add('hidden'); }
-
-    if(freshU.measureHistory && freshU.showMeasurements) { 
-        document.getElementById('coach-view-measures').classList.remove('hidden'); 
-        if(freshU.measureHistory && freshU.measureHistory.length > 0) { 
-            // FIX HEIGHT & MARGIN
-            document.querySelector('#coach-view-measures canvas').parentElement.style.height = '250px';
-            document.querySelector('#coach-view-measures canvas').parentElement.style.marginBottom = '25px';
-            injectChartFilter('coachMeasuresChart', 'window.updateMeasureChart');
-            // Render inicial 3 Meses
-            renderFilteredMeasureChart('coachMeasuresChart', coachMeasureChart, freshU.measureHistory, 90); 
-        }
-    } else { document.getElementById('coach-view-measures').classList.add('hidden'); }
+    if(freshU.bioHistory && freshU.showBio) { document.getElementById('coach-view-bio').classList.remove('hidden'); fixCoachChart('coachBioChart'); injectChartFilter('coachBioChart', 'window.updateBioChart'); renderFilteredChart('coachBioChart', coachBioChart, freshU.bioHistory, 'muscle', '#00ffff', 90); } else { document.getElementById('coach-view-bio').classList.add('hidden'); }
+    if(freshU.skinfoldHistory && freshU.showSkinfolds) { document.getElementById('coach-view-skinfolds').classList.remove('hidden'); fixCoachChart('coachFatChart'); injectChartFilter('coachFatChart', 'window.updateFatChart'); renderFilteredChart('coachFatChart', coachFatChart, freshU.skinfoldHistory, 'fat', '#ffaa00', 90); } else { document.getElementById('coach-view-skinfolds').classList.add('hidden'); }
+    if(freshU.measureHistory && freshU.showMeasurements) { document.getElementById('coach-view-measures').classList.remove('hidden'); fixCoachChart('coachMeasuresChart'); injectChartFilter('coachMeasuresChart', 'window.updateMeasureChart'); renderFilteredMeasureChart('coachMeasuresChart', coachMeasureChart, freshU.measureHistory, 90); } else { document.getElementById('coach-view-measures').classList.add('hidden'); }
 
     document.getElementById('coach-toggle-bio').checked = !!freshU.showBio;
     document.getElementById('coach-toggle-skinfolds').checked = !!freshU.showSkinfolds;
@@ -999,7 +962,6 @@ window.openCoachView = async (uid, u) => {
     document.getElementById('coach-toggle-videos').checked = !!freshU.showVideos;
     const togglePhotos = document.getElementById('coach-toggle-photos'); if (togglePhotos) { togglePhotos.checked = freshU.showPhotos !== false; }
 
-    // Toggle Telegram (Coach side)
     const configCard = document.querySelector('#ctab-content-profile .card:last-child');
     if(configCard) {
         if(!document.getElementById('coach-toggle-telegram')) {
@@ -1027,24 +989,22 @@ window.openCoachView = async (uid, u) => {
     renderMuscleRadar('coachMuscleChart', freshU.muscleStats || {});
     const st = freshU.stats || {}; document.getElementById('coach-stats-text').innerHTML = `<div class="stat-pill"><b>${st.workouts||0}</b><span>ENTRENOS</span></div><div class="stat-pill"><b>${(st.totalKg/1000||0).toFixed(1)}t</b><span>CARGA</span></div><div class="stat-pill"><b>${st.totalReps||0}</b><span>REPS</span></div>`;
     
-    if(freshU.weightHistory) { 
-        // FIX HEIGHT & MARGIN PARA EL PESO EN COACH
-        const wContainer = document.getElementById('coachWeightChart').parentElement;
-        wContainer.style.height = '250px';
-        wContainer.style.marginBottom = '25px';
-        injectChartFilter('coachWeightChart', 'window.updateWeightChart'); 
-        coachChart = renderFilteredChart('coachWeightChart', coachChart, freshU.weightHistory, 'weight', '#ff3333', 9999); 
-    }
+    if(freshU.weightHistory) { fixCoachChart('coachWeightChart'); injectChartFilter('coachWeightChart', 'window.updateWeightChart'); coachChart = renderFilteredChart('coachWeightChart', coachChart, freshU.weightHistory, 'weight', '#ff3333', 90); }
 
     const hList = document.getElementById('coach-history-list'); hList.innerHTML = 'Cargando...';
     const wSnap = await getDocs(query(collection(db,"workouts"), where("uid","==",uid))); hList.innerHTML = wSnap.empty ? 'Sin datos.' : '';
     wSnap.docs.map(doc => ({id: doc.id, ...doc.data()})).sort((a,b) => b.date - a.date).slice(0, 10).forEach(d => {
-        const date = d.date ? new Date(d.date.seconds*1000).toLocaleDateString() : '-';
-        hList.innerHTML += `<div class="history-row" style="grid-template-columns: 60px 1fr 30px 80px;"><div>${date}</div><div style="overflow:hidden; text-overflow:ellipsis;">${d.routine}</div><div>${d.rpe === 'Suave' ? '🟢' : (d.rpe === 'Duro' ? '🟠' : '🔴')}</div><button class="btn-small btn-outline" onclick="viewWorkoutDetails('${d.routine}', '${encodeURIComponent(JSON.stringify(d.details))}', '${encodeURIComponent(d.note||"")}')">Ver</button></div>`;
+        let date = '-', timeStr = '';
+        if(d.date) { 
+            const dObj = d.date.seconds ? new Date(d.date.seconds*1000) : d.date.toDate();
+            date = dObj.toLocaleDateString();
+            timeStr = dObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        }
+        hList.innerHTML += `<div class="history-row" style="grid-template-columns: 60px 1fr 30px 80px;"><div>${date}</div><div style="overflow:hidden; text-overflow:ellipsis;">${d.routine}</div><div>${d.rpe === 'Suave' ? '🟢' : (d.rpe === 'Duro' ? '🟠' : '🔴')}</div><button class="btn-small btn-outline" onclick="viewWorkoutDetails('${d.routine}', '${encodeURIComponent(JSON.stringify(d.details))}', '${encodeURIComponent(d.note||"")}', '${timeStr}')">Ver</button></div>`;
     });
 };
 
-window.viewWorkoutDetails = (routineName, detailsStr, noteStr) => { try { const details = JSON.parse(decodeURIComponent(detailsStr)); const note = decodeURIComponent(noteStr || ""); let html = `<div class="detail-note-box">📝 ${note || "Sin notas."}</div>`; details.forEach(ex => { const name = ex.n || ex; const sets = ex.s || []; html += `<div class="detail-exercise-card"><div class="detail-exercise-title">${name}</div><div class="detail-sets-grid">`; if (sets.length > 0) { sets.forEach((s, i) => { const num = s.numDisplay || (i + 1); const w = s.w || 0; const r = s.r || 0; const isDrop = s.isDrop ? '<span style="color:var(--warning-color);margin-left:2px">💧</span>' : ''; const dropStyle = s.isDrop ? 'border: 1px solid var(--warning-color); background: rgba(255, 170, 0, 0.15);' : ''; html += `<div class="detail-set-badge" style="${dropStyle}"><span class="detail-set-num">#${num}</span><span><b>${r}</b> <span style="color:#666">x</span> ${w}k</span>${isDrop}</div>`; }); } else { html += `<div style="font-size:0.7rem; color:#666;">Sin datos.</div>`; } html += `</div></div>`; }); document.getElementById('detail-title').innerText = routineName; document.getElementById('detail-content').innerHTML = html; window.openModal('modal-details'); } catch (e) { console.error(e); alert("Error cargando detalles."); } };
+window.viewWorkoutDetails = (routineName, detailsStr, noteStr, timeStr = "") => { try { const details = JSON.parse(decodeURIComponent(detailsStr)); const note = decodeURIComponent(noteStr || ""); let timeHtml = timeStr ? `<div style="text-align:center; color:#666; font-size:0.75rem; margin-bottom:10px;">Finalizado: ${timeStr}</div>` : ""; let html = `${timeHtml}<div class="detail-note-box">📝 ${note || "Sin notas."}</div>`; details.forEach(ex => { const name = ex.n || ex; const sets = ex.s || []; html += `<div class="detail-exercise-card"><div class="detail-exercise-title">${name}</div><div class="detail-sets-grid">`; if (sets.length > 0) { sets.forEach((s, i) => { const num = s.numDisplay || (i + 1); const w = s.w || 0; const r = s.r || 0; const isDrop = s.isDrop ? '<span style="color:var(--warning-color);margin-left:2px">💧</span>' : ''; const dropStyle = s.isDrop ? 'border: 1px solid var(--warning-color); background: rgba(255, 170, 0, 0.15);' : ''; html += `<div class="detail-set-badge" style="${dropStyle}"><span class="detail-set-num">#${num}</span><span><b>${r}</b> <span style="color:#666">x</span> ${w}k</span>${isDrop}</div>`; }); } else { html += `<div style="font-size:0.7rem; color:#666;">Sin datos.</div>`; } html += `</div></div>`; }); document.getElementById('detail-title').innerText = routineName; document.getElementById('detail-content').innerHTML = html; window.openModal('modal-details'); } catch (e) { console.error(e); alert("Error cargando detalles."); } };
 window.openVideo = (url) => { if (!url) return; let embedUrl = url.includes("watch?v=") ? url.replace("watch?v=", "embed/") : url.replace("youtu.be/", "youtube.com/embed/"); document.getElementById('youtube-frame').src = embedUrl + "?autoplay=1&rel=0"; window.openModal('modal-video'); };
 window.closeVideo = () => { window.closeModal('modal-video'); document.getElementById('youtube-frame').src = ""; };
 window.viewFullImage = (src) => { if (!src || src === window.location.href) return; document.getElementById('full-image-src').src = src; window.openModal('modal-image-viewer'); };
@@ -1055,45 +1015,39 @@ window.updateUserRole = async (newRole) => { if(!selectedUserCoach) return; if(c
 window.assignToAssistant = async (assistantId) => { if(!selectedUserCoach) return; await updateDoc(doc(db,"users",selectedUserCoach), {assignedCoach: assistantId}); alert("Atleta reasignado"); openCoachView(selectedUserCoach, selectedUserObj); };
 window.goToCreateRoutine = () => { window.switchTab('routines-view'); window.openEditor(); };
 window.filterCoachRoutines = (text) => { const s = document.getElementById('coach-routine-select'); s.innerHTML = ''; const term = normalizeText(text); const filtered = allRoutinesCache.filter(r => normalizeText(r.name).includes(term)); if(filtered.length === 0) s.innerHTML = '<option value="">No encontrada</option>'; else filtered.forEach(r => { const o = document.createElement('option'); o.value = r.id; o.innerText = r.name; s.appendChild(o); }); };
+
+// --- NUEVA ASIGNACIÓN DE RUTINA CON ORDEN ---
 window.assignRoutine = async () => { 
     const rid = document.getElementById('coach-routine-select').value; 
     if(!rid || rid === "") return alert("❌ Selecciona una rutina."); 
     
     try { 
-        // 1. Dar permiso en la rutina (como antes)
         await updateDoc(doc(db, "routines", rid), { assignedTo: arrayUnion(selectedUserCoach) }); 
-        
-        // 2. NUEVO: Añadir esta rutina AL FINAL de la lista de orden del usuario
-        await updateDoc(doc(db, "users", selectedUserCoach), { 
-            routineOrder: arrayUnion(rid) 
-        });
-
+        await updateDoc(doc(db, "users", selectedUserCoach), { routineOrder: arrayUnion(rid) });
         alert("✅ Asignada y ordenada al final."); 
         openCoachView(selectedUserCoach, selectedUserObj); 
-    } catch(e) { 
-        alert("Error: " + e.message); 
-    } 
-};window.assignPlan = async () => { 
+    } catch(e) { alert("Error: " + e.message); } 
+};
+
+// --- NUEVA ASIGNACIÓN DE PLAN (SOBRESCRIBE ORDEN) ---
+window.assignPlan = async () => { 
     const planId = document.getElementById('coach-plan-select').value; 
     if(!planId) return alert("Selecciona un plan."); 
     try { 
         const planSnap = await getDoc(doc(db, "plans", planId)); 
         const planData = planSnap.data();
-        const routinesList = planData.routines; // Esto ya viene en orden correcto del plan
+        const routinesList = planData.routines; 
 
-        // 1. Dar permisos en cada rutina (array assignedTo)
         const promises = routinesList.map(rid => updateDoc(doc(db, "routines", rid), { assignedTo: arrayUnion(selectedUserCoach) })); 
         await Promise.all(promises); 
 
-        // 2. GUARDA EL ORDEN EN EL USUARIO
         await updateDoc(doc(db, "users", selectedUserCoach), { routineOrder: routinesList });
 
         alert("✅ Plan asignado y ordenado."); 
         openCoachView(selectedUserCoach, selectedUserObj); 
-    } catch(e) { 
-        alert("Error: " + e.message); 
-    } 
+    } catch(e) { alert("Error: " + e.message); } 
 };
+
 window.unassignRoutine = async (rid) => { if(confirm("¿Quitar rutina?")) { await updateDoc(doc(db, "routines", rid), { assignedTo: arrayRemove(selectedUserCoach) }); openCoachView(selectedUserCoach, selectedUserObj); } };
 
 window.exportWorkoutHistory = async () => {
