@@ -4,7 +4,7 @@ import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, onSnapshot, q
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 import { EXERCISES } from './data.js';
 
-console.log("⚡ FIT DATA: App v11.3 (Ordered Routines + Active Avatar)...");
+console.log("⚡ FIT DATA: App v11.4 (Smart Notifications + Timer)...");
 
 const firebaseConfig = {
   apiKey: "AIzaSyDW40Lg6QvBc3zaaA58konqsH3QtDrRmyM",
@@ -368,10 +368,11 @@ window.loadProfile = async () => {
             if(d.date) { 
                 const dateObj = d.date.toDate ? d.date.toDate() : new Date(d.date.seconds*1000); 
                 dateStr = dateObj.toLocaleDateString('es-ES', {day:'2-digit', month:'short'}); 
-                timeStr = dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                timeStr = d.duration ? `⏱️ ${d.duration}` : dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             }
             let rpeColor = 'rpe-easy'; if(d.rpe === 'Duro' || d.rpe === 'Intenso') rpeColor = 'rpe-hard'; if(d.rpe === 'Fallo' || d.rpe === 'Extremo') rpeColor = 'rpe-max';
             const detailsStr = d.details ? encodeURIComponent(JSON.stringify(d.details)) : ""; const noteStr = d.note ? encodeURIComponent(d.note) : "";
+            
             const btnVer = d.details ? `<button class="btn-small btn-outline" style="margin:0; padding:2px 6px;" onclick="window.viewWorkoutDetails('${d.routine}', '${detailsStr}', '${noteStr}', '${timeStr}')">🔍</button>` : '';
             histDiv.innerHTML += `<div class="history-row"><div style="color:var(--accent-color); font-weight:bold;">${dateStr}</div><div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:5px;">${d.routine}</div><div style="display:flex; justify-content:center;"><span class="rpe-dot ${rpeColor}" title="${d.rpe}"></span></div><div style="text-align:right;">${btnVer}</div></div>`;
         });
@@ -794,6 +795,7 @@ window.finishWorkout = async (rpeVal) => {
         for (const [muscle, count] of Object.entries(muscleCounts)) { updates[`muscleStats.${muscle}`] = increment(count); }
         await updateDoc(doc(db, "users", currentUser.uid), updates);
         
+        // --- LIMPIEZA AUTO ---
         compressAndCleanupWorkouts(currentUser.uid); 
         
         showToast(`🏆 ¡Entreno nº ${workoutNum} completado! Tiempo: ${durationStr}`);
@@ -917,7 +919,6 @@ window.viewPlanContent = async (planName, planId) => { const snap = await getDoc
 window.createPlan = async () => { const name = document.getElementById('new-plan-name').value; const checks = document.querySelectorAll('.plan-check:checked'); if(!name || checks.length === 0) return alert("Pon un nombre y selecciona rutinas"); await addDoc(collection(db, "plans"), { name: name, routines: Array.from(checks).map(c => c.value), createdBy: currentUser.uid }); alert("Plan Creado"); document.getElementById('new-plan-name').value = ''; window.loadAdminPlans(); };
 window.deletePlan = async (id) => { if(confirm("¿Borrar plan?")) { await deleteDoc(doc(db, "plans", id)); window.loadAdminPlans(); } };
 window.openAssignPlanModal = async (planId) => { assignMode = 'plan'; selectedPlanForMassAssign = planId; const list = document.getElementById('assign-users-list'); window.openModal('modal-assign-plan'); try { const snap = await getDoc(doc(db, "plans", planId)); if (snap.exists()) document.getElementById('assign-plan-title').innerText = `Asignar "${snap.data().name}" a:`; let q = userData.role === 'assistant' ? query(collection(db, "users"), where("assignedCoach", "==", currentUser.uid)) : collection(db, "users"); const uSnap = await getDocs(q); list.innerHTML = ''; uSnap.forEach(d => { const u = d.data(); if (u.role === 'athlete') { const div = document.createElement('div'); div.className = "selector-item"; div.innerHTML = `<input type="checkbox" class="user-mass-check selector-checkbox" value="${d.id}" id="u-${d.id}"><label for="u-${d.id}" class="selector-label">${u.name}</label>`; list.appendChild(div); } }); } catch(e) { console.error(e); } };
-
 window.distributePlan = async () => { 
     const checks = document.querySelectorAll('.user-mass-check:checked'); 
     if(checks.length === 0) return alert("Selecciona al menos un cliente."); 
@@ -1050,8 +1051,6 @@ window.updateUserRole = async (newRole) => { if(!selectedUserCoach) return; if(c
 window.assignToAssistant = async (assistantId) => { if(!selectedUserCoach) return; await updateDoc(doc(db,"users",selectedUserCoach), {assignedCoach: assistantId}); alert("Atleta reasignado"); openCoachView(selectedUserCoach, selectedUserObj); };
 window.goToCreateRoutine = () => { window.switchTab('routines-view'); window.openEditor(); };
 window.filterCoachRoutines = (text) => { const s = document.getElementById('coach-routine-select'); s.innerHTML = ''; const term = normalizeText(text); const filtered = allRoutinesCache.filter(r => normalizeText(r.name).includes(term)); if(filtered.length === 0) s.innerHTML = '<option value="">No encontrada</option>'; else filtered.forEach(r => { const o = document.createElement('option'); o.value = r.id; o.innerText = r.name; s.appendChild(o); }); };
-
-// --- NUEVA ASIGNACIÓN DE RUTINA CON ORDEN ---
 window.assignRoutine = async () => { 
     const rid = document.getElementById('coach-routine-select').value; 
     if(!rid || rid === "") return alert("❌ Selecciona una rutina."); 
@@ -1063,8 +1062,6 @@ window.assignRoutine = async () => {
         openCoachView(selectedUserCoach, selectedUserObj); 
     } catch(e) { alert("Error: " + e.message); } 
 };
-
-// --- NUEVA ASIGNACIÓN DE PLAN (SOBRESCRIBE ORDEN) ---
 window.assignPlan = async () => { 
     const planId = document.getElementById('coach-plan-select').value; 
     if(!planId) return alert("Selecciona un plan."); 
@@ -1082,7 +1079,6 @@ window.assignPlan = async () => {
         openCoachView(selectedUserCoach, selectedUserObj); 
     } catch(e) { alert("Error: " + e.message); } 
 };
-
 window.unassignRoutine = async (rid) => { if(confirm("¿Quitar rutina?")) { await updateDoc(doc(db, "routines", rid), { assignedTo: arrayRemove(selectedUserCoach) }); openCoachView(selectedUserCoach, selectedUserObj); } };
 
 window.exportWorkoutHistory = async () => {
