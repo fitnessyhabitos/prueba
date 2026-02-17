@@ -4,7 +4,7 @@ import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, onSnapshot, q
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 import { EXERCISES } from './data.js';
 
-console.log("⚡ FIT DATA: App v11.5 (Safety Checks + Clean Dropsets)...");
+console.log("⚡ FIT DATA: App v12.0 (History Editing + Advanced Routine View)...");
 
 const firebaseConfig = {
   apiKey: "AIzaSyDW40Lg6QvBc3zaaA58konqsH3QtDrRmyM",
@@ -21,8 +21,8 @@ const db = getFirestore(app);
 const storage = getStorage(app);
 
 enableIndexedDbPersistence(db).catch((err) => {
-    if (err.code == 'failed-precondition') { console.warn('Persistencia offline desactivada (múltiples pestañas).'); }
-    else if (err.code == 'unimplemented') { console.warn('Navegador no soporta persistencia offline.'); }
+    if (err.code == 'failed-precondition') { console.warn('Persistencia offline desactivada.'); }
+    else if (err.code == 'unimplemented') { console.warn('Navegador no soporta persistencia.'); }
 });
 
 const AVAILABLE_DIETS = [
@@ -48,9 +48,13 @@ let currentNoticeId = null;
 let currentNoticeType = null; 
 let deferredPrompt = null; 
 
+// Cache Variables
 let rankFilterTime = 'all';        
 let rankFilterGender = 'all';     
 let rankFilterCat = 'kg';         
+let adminUsersCache = null; // Cache para lista de usuarios (Coach)
+let editingHistoryId = null; // ID del workout que se está editando en el historial
+let currentHistoryDetails = null; // Datos temporales de edición
 
 let chartInstance = null; let progressChart = null; let fatChartInstance = null; let bioChartInstance = null; let measureChartInstance = null; let coachFatChart = null; let coachBioChart = null; let coachMeasureChart = null; let radarChartInstance = null; let coachChart = null; let userRadarChart = null; let coachRadarChart = null;
 
@@ -114,17 +118,8 @@ function injectTelegramUI() {
         const wrapper = document.createElement('div');
         wrapper.id = 'telegram-ui-wrapper';
         wrapper.style.cssText = "width: 100%; margin-top: 25px; margin-bottom: 25px; text-align: center; border-top: 1px solid #222; padding-top: 15px;"; 
-        
         const telegramIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right:8px;"><path d="M20.665 3.717l-17.73 6.837c-1.21.486-1.203 1.161-.222 1.462l4.552 1.42 10.532-6.645c.498-.303.953-.14.579.192l-8.533 7.701h-.002l.002.001-.314 4.692c.46 0 .663-.211.921-.46l2.211-2.15 4.599 3.397c.848.467 1.457.227 1.668-.785l3.019-14.228c.309-1.239-.473-1.8-1.282-1.434z" fill="white"/></svg>`;
-
-        wrapper.innerHTML = `
-            <label style="display:block; margin-bottom:8px; font-size:0.85rem; color:#aaa; font-weight:bold;">📸 Tu Usuario Telegram (Activo)</label>
-            <input type="text" id="cfg-telegram" placeholder="@usuario" value="${userData.telegram || ''}" 
-                style="width: 70%; max-width: 250px; margin: 0 auto 15px auto; background: #1a1a1a; border: 1px solid var(--accent-color); color: white; padding: 10px; border-radius: 8px; text-align: center; display:block;">
-            <button onclick="window.contactCoach()" class="btn" style="width: auto; margin: 0 auto; padding: 12px 25px; border-radius: 50px; font-size: 0.85rem; display:flex; align-items:center; justify-content:center;">
-                ${telegramIcon} Contactar Coach
-            </button>
-        `;
+        wrapper.innerHTML = `<label style="display:block; margin-bottom:8px; font-size:0.85rem; color:#aaa; font-weight:bold;">📸 Tu Usuario Telegram (Activo)</label><input type="text" id="cfg-telegram" placeholder="@usuario" value="${userData.telegram || ''}" style="width: 70%; max-width: 250px; margin: 0 auto 15px auto; background: #1a1a1a; border: 1px solid var(--accent-color); color: white; padding: 10px; border-radius: 8px; text-align: center; display:block;"><button onclick="window.contactCoach()" class="btn" style="width: auto; margin: 0 auto; padding: 12px 25px; border-radius: 50px; font-size: 0.85rem; display:flex; align-items:center; justify-content:center;">${telegramIcon} Contactar Coach</button>`;
         restInput.parentElement.insertAdjacentElement('afterend', wrapper);
     }
 }
@@ -230,63 +225,21 @@ function renderFilteredChart(canvasId, instanceVar, dataHistory, typeKey, color,
     const ctx = document.getElementById(canvasId); 
     if (!ctx) return null; 
     if (instanceVar) instanceVar.destroy();
-
     const now = Date.now(); 
     const cutoff = now - (rangeDays * 24 * 60 * 60 * 1000);
-
-    const safeData = Array.isArray(dataHistory) ? dataHistory.filter(d => {
-        return d && typeof d === 'object' && d.date && typeof d.date.seconds === 'number';
-    }) : [];
-
-    const filtered = safeData
-        .filter(d => (d.date.seconds * 1000) > cutoff)
-        .sort((a,b) => a.date.seconds - b.date.seconds);
-
+    const safeData = Array.isArray(dataHistory) ? dataHistory.filter(d => { return d && typeof d === 'object' && d.date && typeof d.date.seconds === 'number'; }) : [];
+    const filtered = safeData.filter(d => (d.date.seconds * 1000) > cutoff).sort((a,b) => a.date.seconds - b.date.seconds);
     const labels = filtered.map(d => new Date(d.date.seconds * 1000).toLocaleDateString('es-ES', {day:'2-digit', month:'short'}));
     const values = filtered.map(d => d[typeKey] || 0);
-
-    return new Chart(ctx, { 
-        type: 'line', 
-        data: { 
-            labels: labels, 
-            datasets: [{ 
-                label: typeKey.toUpperCase(), 
-                data: values, 
-                borderColor: color, 
-                backgroundColor: color + '20', 
-                tension: 0.3, 
-                fill: true, 
-                pointRadius: 4, 
-                pointBackgroundColor: '#000', 
-                pointBorderColor: color 
-            }] 
-        }, 
-        options: { 
-            maintainAspectRatio: false, 
-            layout: { padding: { top: 10, bottom: 5, left: 5, right: 10 } },
-            plugins: { legend: { display: false } }, 
-            scales: { 
-                x: { display: true, ticks: { color: '#666', maxRotation: 45, minRotation: 0, font: {size: 10} }, grid: { display: false } }, 
-                y: { grid: { color: '#333' }, ticks: { color: '#888' } } 
-            } 
-        } 
-    });
+    return new Chart(ctx, { type: 'line', data: { labels: labels, datasets: [{ label: typeKey.toUpperCase(), data: values, borderColor: color, backgroundColor: color + '20', tension: 0.3, fill: true, pointRadius: 4, pointBackgroundColor: '#000', pointBorderColor: color }] }, options: { maintainAspectRatio: false, layout: { padding: { top: 10, bottom: 5, left: 5, right: 10 } }, plugins: { legend: { display: false } }, scales: { x: { display: true, ticks: { color: '#666', maxRotation: 45, minRotation: 0, font: {size: 10} }, grid: { display: false } }, y: { grid: { color: '#333' }, ticks: { color: '#888' } } } } });
 }
-
 function injectChartFilter(canvasId, callbackName) {
     const canvas = document.getElementById(canvasId); if(!canvas) return; const parent = canvas.parentElement; if(parent.querySelector('.chart-filter-container')) return;
     const div = document.createElement('div'); div.className = 'chart-filter-container';
     div.innerHTML = `<select class="chart-filter-select" onchange="${callbackName}('${canvasId}', this.value)"><option value="30">1 Mes</option><option value="90">3 Meses</option><option value="180">6 Meses</option><option value="9999" selected>Todo</option></select>`;
     parent.insertBefore(div, canvas);
 }
-
-window.updateMeasureChart = (id, range) => {
-    const sourceData = (id === 'coachMeasuresChart') ? selectedUserObj.measureHistory : userData.measureHistory;
-    const instance = (id === 'coachMeasuresChart') ? coachMeasureChart : measureChartInstance;
-    const newInst = renderFilteredMeasureChart(id, instance, sourceData, parseInt(range));
-    if(id === 'coachMeasuresChart') coachMeasureChart = newInst; else measureChartInstance = newInst;
-};
-
+window.updateMeasureChart = (id, range) => { const sourceData = (id === 'coachMeasuresChart') ? selectedUserObj.measureHistory : userData.measureHistory; const instance = (id === 'coachMeasuresChart') ? coachMeasureChart : measureChartInstance; const newInst = renderFilteredMeasureChart(id, instance, sourceData, parseInt(range)); if(id === 'coachMeasuresChart') coachMeasureChart = newInst; else measureChartInstance = newInst; };
 function renderFilteredMeasureChart(canvasId, instanceVar, dataHistory, rangeDays) {
     const ctx = document.getElementById(canvasId); if (!ctx) return null; if (instanceVar) instanceVar.destroy();
     const now = Date.now(); const cutoff = now - (rangeDays * 24 * 60 * 60 * 1000);
@@ -304,43 +257,16 @@ window.loadProfile = async () => {
     if(userData.photo) { document.getElementById('avatar-text').style.display='none'; document.getElementById('avatar-img').src = userData.photo; document.getElementById('avatar-img').style.display='block'; }
     updatePhotoDisplay(userData);
     
-    if(!userData.photo) {
-        const header = document.querySelector('.profile-header');
-        if(!document.getElementById('photo-nudge')) { const nudge = document.createElement('div'); nudge.id = 'photo-nudge'; nudge.className = 'tip-box'; nudge.style.marginTop = '10px'; nudge.innerHTML = '📸 ¡Sube una foto para que tu Coach te reconozca mejor!'; header.parentNode.insertBefore(nudge, header.nextSibling); }
-    } else { const nudge = document.getElementById('photo-nudge'); if(nudge) nudge.remove(); }
+    if(!userData.photo) { const header = document.querySelector('.profile-header'); if(!document.getElementById('photo-nudge')) { const nudge = document.createElement('div'); nudge.id = 'photo-nudge'; nudge.className = 'tip-box'; nudge.style.marginTop = '10px'; nudge.innerHTML = '📸 ¡Sube una foto para que tu Coach te reconozca mejor!'; header.parentNode.insertBefore(nudge, header.nextSibling); } } else { const nudge = document.getElementById('photo-nudge'); if(nudge) nudge.remove(); }
 
     if(userData.rankingOptIn) { document.getElementById('cfg-ranking').checked = true; document.getElementById('top-btn-ranking').classList.remove('hidden'); } else { document.getElementById('cfg-ranking').checked = false; document.getElementById('top-btn-ranking').classList.add('hidden'); }
 
     const fixChartContainer = (id) => { const c = document.getElementById(id); if(c && c.parentElement) { c.parentElement.style.height = '250px'; c.parentElement.style.marginBottom = '35px'; } };
 
-    if(userData.showBio) { 
-        document.getElementById('user-bio-section').classList.remove('hidden'); 
-        if(userData.bioHistory && userData.bioHistory.length > 0) { 
-            fixChartContainer('chartBio');
-            injectChartFilter('chartBio', 'window.updateBioChart'); 
-            renderFilteredChart('chartBio', bioChartInstance, userData.bioHistory, 'muscle', '#00ffff', 9999); 
-        }
-    } else { document.getElementById('user-bio-section').classList.add('hidden'); }
-
+    if(userData.showBio) { document.getElementById('user-bio-section').classList.remove('hidden'); if(userData.bioHistory && userData.bioHistory.length > 0) { fixChartContainer('chartBio'); injectChartFilter('chartBio', 'window.updateBioChart'); renderFilteredChart('chartBio', bioChartInstance, userData.bioHistory, 'muscle', '#00ffff', 9999); } } else { document.getElementById('user-bio-section').classList.add('hidden'); }
     if(userData.dietFile) document.getElementById('btn-diet-view').classList.remove('hidden'); else document.getElementById('btn-diet-view').classList.add('hidden');
-    
-    if(userData.showSkinfolds) {
-        document.getElementById('user-skinfolds-section').classList.remove('hidden');
-        if(userData.skinfoldHistory && userData.skinfoldHistory.length > 0) { 
-            fixChartContainer('chartFat');
-            injectChartFilter('chartFat', 'window.updateFatChart'); 
-            fatChartInstance = renderFilteredChart('chartFat', fatChartInstance, userData.skinfoldHistory, 'fat', '#ffaa00', 9999); 
-        }
-    } else { document.getElementById('user-skinfolds-section').classList.add('hidden'); }
-
-    if(userData.showMeasurements) {
-        document.getElementById('user-measures-section').classList.remove('hidden');
-        if(userData.measureHistory && userData.measureHistory.length > 0) {
-            fixChartContainer('chartMeasures');
-            injectChartFilter('chartMeasures', 'window.updateMeasureChart');
-            measureChartInstance = renderFilteredMeasureChart('chartMeasures', measureChartInstance, userData.measureHistory, 90);
-        }
-    } else { document.getElementById('user-measures-section').classList.add('hidden'); }
+    if(userData.showSkinfolds) { document.getElementById('user-skinfolds-section').classList.remove('hidden'); if(userData.skinfoldHistory && userData.skinfoldHistory.length > 0) { fixChartContainer('chartFat'); injectChartFilter('chartFat', 'window.updateFatChart'); fatChartInstance = renderFilteredChart('chartFat', fatChartInstance, userData.skinfoldHistory, 'fat', '#ffaa00', 9999); } } else { document.getElementById('user-skinfolds-section').classList.add('hidden'); }
+    if(userData.showMeasurements) { document.getElementById('user-measures-section').classList.remove('hidden'); if(userData.measureHistory && userData.measureHistory.length > 0) { fixChartContainer('chartMeasures'); injectChartFilter('chartMeasures', 'window.updateMeasureChart'); measureChartInstance = renderFilteredMeasureChart('chartMeasures', measureChartInstance, userData.measureHistory, 90); } } else { document.getElementById('user-measures-section').classList.add('hidden'); }
     
     const photosCard = document.getElementById('user-photos-card'); if (photosCard) { if (userData.showPhotos !== false) { photosCard.classList.remove('hidden'); } else { photosCard.classList.add('hidden'); } }
     if(userData.restTime) document.getElementById('cfg-rest-time').value = userData.restTime;
@@ -351,11 +277,7 @@ window.loadProfile = async () => {
     document.getElementById('stat-sets').innerText = userData.stats?.totalSets || 0;
     document.getElementById('stat-reps').innerText = userData.stats?.totalReps || 0;
     
-    if(userData.weightHistory) { 
-        fixChartContainer('weightChart');
-        injectChartFilter('weightChart', 'window.updateWeightChart'); 
-        chartInstance = renderFilteredChart('weightChart', chartInstance, userData.weightHistory, 'weight', '#ff3333', 9999); 
-    }
+    if(userData.weightHistory) { fixChartContainer('weightChart'); injectChartFilter('weightChart', 'window.updateWeightChart'); chartInstance = renderFilteredChart('weightChart', chartInstance, userData.weightHistory, 'weight', '#ff3333', 9999); }
 
     const histDiv = document.getElementById('user-history-list'); histDiv.innerHTML = "Cargando...";
     try {
@@ -365,15 +287,10 @@ window.loadProfile = async () => {
         histDiv.innerHTML = workouts.length ? '' : "Sin historial.";
         workouts.forEach(d => {
             let dateStr = '-', timeStr = '';
-            if(d.date) { 
-                const dateObj = d.date.toDate ? d.date.toDate() : new Date(d.date.seconds*1000); 
-                dateStr = dateObj.toLocaleDateString('es-ES', {day:'2-digit', month:'short'}); 
-                timeStr = d.duration ? `⏱️ ${d.duration}` : dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            }
+            if(d.date) { const dateObj = d.date.toDate ? d.date.toDate() : new Date(d.date.seconds*1000); dateStr = dateObj.toLocaleDateString('es-ES', {day:'2-digit', month:'short'}); timeStr = d.duration ? `⏱️ ${d.duration}` : dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); }
             let rpeColor = 'rpe-easy'; if(d.rpe === 'Duro' || d.rpe === 'Intenso') rpeColor = 'rpe-hard'; if(d.rpe === 'Fallo' || d.rpe === 'Extremo') rpeColor = 'rpe-max';
             const detailsStr = d.details ? encodeURIComponent(JSON.stringify(d.details)) : ""; const noteStr = d.note ? encodeURIComponent(d.note) : "";
-            
-            const btnVer = d.details ? `<button class="btn-small btn-outline" style="margin:0; padding:2px 6px;" onclick="window.viewWorkoutDetails('${d.routine}', '${detailsStr}', '${noteStr}', '${timeStr}')">🔍</button>` : '';
+            const btnVer = d.details ? `<button class="btn-small btn-outline" style="margin:0; padding:2px 6px;" onclick="window.viewWorkoutDetails('${d.id}', '${d.routine}', '${detailsStr}', '${noteStr}', '${timeStr}')">🔍</button>` : '';
             histDiv.innerHTML += `<div class="history-row"><div style="color:var(--accent-color); font-weight:bold;">${dateStr}</div><div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:5px;">${d.routine}</div><div style="display:flex; justify-content:center;"><span class="rpe-dot ${rpeColor}" title="${d.rpe}"></span></div><div style="text-align:right;">${btnVer}</div></div>`;
         });
     } catch(e) { histDiv.innerHTML = "Error."; }
@@ -421,24 +338,14 @@ async function loadRoutines() {
     onSnapshot(query(collection(db,"routines")), (s)=>{
         l.innerHTML = '';
         let myRoutines = [];
-        s.forEach(d=>{
-            const r = d.data(); 
-            const isAssignedToMe = r.assignedTo && r.assignedTo.includes(currentUser.uid);
-            if(isAssignedToMe){ myRoutines.push({id: d.id, ...r}); }
-        });
-
-        // ORDEN DINÁMICO
+        s.forEach(d=>{ const r = d.data(); const isAssignedToMe = r.assignedTo && r.assignedTo.includes(currentUser.uid); if(isAssignedToMe){ myRoutines.push({id: d.id, ...r}); } });
         const orderPreference = userData.routineOrder || [];
         myRoutines.sort((a, b) => {
-            let indexA = orderPreference.indexOf(a.id);
-            let indexB = orderPreference.indexOf(b.id);
-            if (indexA === -1) indexA = 9999;
-            if (indexB === -1) indexB = 9999;
+            let indexA = orderPreference.indexOf(a.id); let indexB = orderPreference.indexOf(b.id);
+            if (indexA === -1) indexA = 9999; if (indexB === -1) indexB = 9999;
             return indexA - indexB;
         });
-
         if(myRoutines.length === 0) { l.innerHTML = '<div style="padding:20px; text-align:center; color:#666;">No tienes rutinas asignadas.</div>'; return; }
-
         myRoutines.forEach(r => {
             const div = document.createElement('div'); div.className = 'card'; const canEdit = r.uid === currentUser.uid;
             div.innerHTML = `<div style="display:flex; justify-content:space-between;"><h3 style="color:var(--accent-color)">${r.name}</h3><div>${canEdit ? `<button style="background:none;border:none;margin-right:10px;" onclick="openEditor('${r.id}')">✏️</button><button style="background:none;border:none;" onclick="delRoutine('${r.id}')">🗑️</button>` : '🔒'}</div></div><p style="color:#666; font-size:0.8rem; margin:10px 0;">${r.exercises.length} Ejercicios</p><button class="btn" onclick="startWorkout('${r.id}')">ENTRENAR</button>`;
@@ -603,7 +510,6 @@ window.loadRankingView = async () => {
 window.initSwap = (idx) => { swapTargetIndex = idx; const currentEx = activeWorkout.exs[idx]; const muscle = currentEx.mInfo.main; const list = document.getElementById('swap-list'); list.innerHTML = ''; const alternatives = EXERCISES.filter(e => getMuscleInfoByGroup(e.m).main === muscle && e.n !== currentEx.n); if(alternatives.length === 0) list.innerHTML = '<div style="padding:10px;">No hay alternativas directas.</div>'; else alternatives.forEach(alt => { const d = document.createElement('div'); d.style.padding = "10px"; d.style.borderBottom = "1px solid #333"; d.style.cursor = "pointer"; d.innerHTML = `<b>${alt.n}</b>`; d.onclick = () => window.performSwap(alt.n); list.appendChild(d); }); window.openModal('modal-swap'); };
 window.performSwap = (newName) => { if(swapTargetIndex === null) return; const data = getExerciseData(newName); const currentSets = activeWorkout.exs[swapTargetIndex].sets.map(s => ({...s, prev:'-', d: false})); activeWorkout.exs[swapTargetIndex].n = newName; activeWorkout.exs[swapTargetIndex].img = data.img; activeWorkout.exs[swapTargetIndex].video = data.v; activeWorkout.exs[swapTargetIndex].sets = currentSets; saveLocalWorkout(); renderWorkout(); window.closeModal('modal-swap'); };
 
-// --- RENDER WORKOUT UPDATED (DELETE DROPSET BUTTON) ---
 function renderWorkout() {
     const c = document.getElementById('workout-exercises'); c.innerHTML = ''; document.getElementById('workout-title').innerText = activeWorkout.name;
     activeWorkout.exs.forEach((e, i) => {
@@ -910,42 +816,63 @@ window.renderProgressChart = (exName) => {
 // --- ADMIN / COACH LOGIC ---
 window.toggleAdminMode = (mode) => { document.getElementById('tab-users').classList.toggle('active', mode==='users'); document.getElementById('tab-lib').classList.toggle('active', mode==='lib'); document.getElementById('tab-plans').classList.toggle('active', mode==='plans'); document.getElementById('admin-users-card').classList.toggle('hidden', mode!=='users'); document.getElementById('admin-lib-card').classList.toggle('hidden', mode!=='lib'); document.getElementById('admin-plans-card').classList.toggle('hidden', mode!=='plans'); if(mode==='users') window.loadAdminUsers(); if(mode==='lib') window.loadAdminLibrary(); if(mode==='plans') window.loadAdminPlans(); };
 
-window.loadAdminUsers = async () => {
-    const l = document.getElementById('admin-list'); l.innerHTML = '↻ Cargando...';
+window.loadAdminUsers = async (forceRefresh = false) => {
+    const l = document.getElementById('admin-list');
+    
+    // CACHÉ INTELIGENTE
+    if (adminUsersCache && !forceRefresh) {
+        renderAdminList(adminUsersCache);
+        return; 
+    }
+
+    l.innerHTML = '↻ Cargando...';
     try {
         let q = userData.role === 'assistant' ? query(collection(db, "users"), where("assignedCoach", "==", currentUser.uid)) : collection(db, "users");
-        const s = await getDocs(q); l.innerHTML = '';
-        if(userData.role === 'admin') { const globalNoticeBtn = document.createElement('button'); globalNoticeBtn.className = 'btn'; globalNoticeBtn.style.cssText = "width:100%; margin-bottom:15px; background:var(--warning-color); color:black; font-weight:bold; display:flex; align-items:center; justify-content:center; gap:8px;"; globalNoticeBtn.innerHTML = "📢 CREAR AVISO PARA TODOS"; globalNoticeBtn.onclick = () => window.openNoticeEditor('GLOBAL'); l.appendChild(globalNoticeBtn); }
-        const usersList = s.docs.map(d => ({id: d.id, ...d.data()}));
-        usersList.sort((a, b) => { const dateA = a.lastWorkoutDate ? a.lastWorkoutDate.seconds : 0; const dateB = b.lastWorkoutDate ? b.lastWorkoutDate.seconds : 0; return dateB - dateA; });
-        
-        usersList.forEach(u => {
-            // LÓGICA DE NOTIFICACIÓN ROJA INTELIGENTE
-            let activeClass = "";
-            if (u.lastWorkoutDate) { 
-                const last = u.lastWorkoutDate.toDate(); 
-                const today = new Date(); 
-                const isToday = last.getDate() === today.getDate() && last.getMonth() === today.getMonth() && last.getFullYear() === today.getFullYear(); 
-                
-                // ¿Es nuevo? (No visto O la fecha del entreno es mayor a la fecha de visto)
-                const isUnseen = !u.lastWorkoutSeen || (u.lastWorkoutDate.seconds > u.lastWorkoutSeen.seconds);
-
-                if (isToday && isUnseen) activeClass = "avatar-active-today"; 
-            }
-
-            const avatarHtml = u.photo 
-                ? `<img src="${u.photo}" class="mini-avatar ${activeClass}">` 
-                : `<div class="mini-avatar-placeholder ${activeClass}">${u.name.charAt(0).toUpperCase()}</div>`;
-            
-            let rowClass = "admin-user-row"; if(u.id === currentUser.uid) rowClass += " is-me"; if(u.role === 'assistant') rowClass += " is-coach";
-            
-            const btnNotice = `<button class="btn-outline btn-small" style="margin:0; width:40px; border-color:#ffaa00; color:#ffaa00; display:flex; align-items:center; justify-content:center;" onclick="event.stopPropagation(); window.openNoticeEditor('${u.id}')">📢</button>`;
-            const div = document.createElement('div'); div.className = rowClass;
-            div.innerHTML=`${avatarHtml}<div style="overflow:hidden;"><div style="font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:white; display:flex; align-items:center;">${u.name} ${u.role === 'assistant' ? '🛡️' : ''}</div><div style="font-size:0.75rem; color:#888; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${u.email}</div></div><div style="display:flex; gap:8px;">${btnNotice}<button class="btn-outline btn-small" style="margin:0; border-color:#444; color:#ccc;" onclick="window.openCoachView('${u.id}', null)">⚙️</button></div>`;
-            l.appendChild(div);
-        });
+        const s = await getDocs(q);
+        adminUsersCache = s.docs.map(d => ({id: d.id, ...d.data()}));
+        renderAdminList(adminUsersCache);
     } catch (e) { l.innerHTML = 'Error de permisos o conexión.'; console.log(e); }
 };
+
+function renderAdminList(usersList) {
+    const l = document.getElementById('admin-list');
+    l.innerHTML = '';
+    
+    if(userData.role === 'admin') { 
+        const globalNoticeBtn = document.createElement('button'); globalNoticeBtn.className = 'btn'; globalNoticeBtn.style.cssText = "width:100%; margin-bottom:15px; background:var(--warning-color); color:black; font-weight:bold; display:flex; align-items:center; justify-content:center; gap:8px;"; globalNoticeBtn.innerHTML = "📢 CREAR AVISO PARA TODOS"; globalNoticeBtn.onclick = () => window.openNoticeEditor('GLOBAL'); l.appendChild(globalNoticeBtn); 
+    }
+
+    usersList.sort((a, b) => { 
+        const dateA = a.lastWorkoutDate ? a.lastWorkoutDate.seconds : 0; 
+        const dateB = b.lastWorkoutDate ? b.lastWorkoutDate.seconds : 0; 
+        return dateB - dateA; 
+    });
+    
+    usersList.forEach(u => {
+        let activeClass = "";
+        if (u.lastWorkoutDate) { 
+            const last = u.lastWorkoutDate.toDate ? u.lastWorkoutDate.toDate() : new Date(u.lastWorkoutDate.seconds * 1000); 
+            const today = new Date(); 
+            const isToday = last.getDate() === today.getDate() && last.getMonth() === today.getMonth() && last.getFullYear() === today.getFullYear(); 
+            
+            const seenSeconds = u.lastWorkoutSeen ? u.lastWorkoutSeen.seconds : 0;
+            const workoutSeconds = u.lastWorkoutDate.seconds;
+            
+            if (isToday && (workoutSeconds > seenSeconds)) activeClass = "avatar-active-today"; 
+        }
+
+        const avatarHtml = u.photo 
+            ? `<img src="${u.photo}" class="mini-avatar ${activeClass}">` 
+            : `<div class="mini-avatar-placeholder ${activeClass}">${u.name.charAt(0).toUpperCase()}</div>`;
+        
+        let rowClass = "admin-user-row"; if(u.id === currentUser.uid) rowClass += " is-me"; if(u.role === 'assistant') rowClass += " is-coach";
+        
+        const btnNotice = `<button class="btn-outline btn-small" style="margin:0; width:40px; border-color:#ffaa00; color:#ffaa00; display:flex; align-items:center; justify-content:center;" onclick="event.stopPropagation(); window.openNoticeEditor('${u.id}')">📢</button>`;
+        const div = document.createElement('div'); div.className = rowClass;
+        div.innerHTML=`${avatarHtml}<div style="overflow:hidden;"><div style="font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:white; display:flex; align-items:center;">${u.name} ${u.role === 'assistant' ? '🛡️' : ''}</div><div style="font-size:0.75rem; color:#888; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${u.email}</div></div><div style="display:flex; gap:8px;">${btnNotice}<button class="btn-outline btn-small" style="margin:0; border-color:#444; color:#ccc;" onclick="window.openCoachView('${u.id}', null)">⚙️</button></div>`;
+        l.appendChild(div);
+    });
+}
 
 window.loadAdminLibrary = async () => {
     const l = document.getElementById('admin-lib-list'); l.innerHTML = '↻ Cargando...';
@@ -956,10 +883,53 @@ window.loadAdminLibrary = async () => {
         s.forEach(d => {
             const r = d.data(); const div = document.createElement('div'); div.className = "assigned-routine-item";
             let author = r.uid === currentUser.uid ? "Mía (Admin)" : (userMap[r.uid] || "Admin");
-            div.innerHTML = `<div style="flex:1;"><b>${r.name}</b><br><span style="font-size:0.7rem; color:#666;">Creado por: ${author}</span></div><div style="display:flex; gap:5px;"><button class="btn-small btn-outline" style="margin:0; width:auto; border-color:#666; color:white;" onclick="window.cloneRoutine('${d.id}')" title="Clonar Rutina">🖨</button><button class="btn-small btn-outline" style="margin:0; width:auto; border-color:#666; color:white;" onclick="window.openEditor('${d.id}')" title="Editar">✏️</button><button class="btn-small btn" style="margin:0; width:auto;" onclick="window.initMassAssignRoutine('${d.id}')" title="Enviar a Atletas">📤</button><button class="btn-small btn-outline" style="margin:0; width:auto; border-color:#666;" onclick="viewRoutineContent('${r.name}','${encodeURIComponent(JSON.stringify(r.exercises))}')" title="Ver">👁️</button><button class="btn-small btn-danger" style="margin:0; width:auto; border:none;" onclick="delRoutine('${d.id}')" title="Borrar">🗑️</button></div>`;
+            div.innerHTML = `<div style="flex:1;"><b>${r.name}</b><br><span style="font-size:0.7rem; color:#666;">Creado por: ${author}</span></div><div style="display:flex; gap:5px;"><button class="btn-small btn-outline" style="margin:0; width:auto; border-color:#666; color:white;" onclick="window.cloneRoutine('${d.id}')" title="Clonar Rutina">🖨</button><button class="btn-small btn-outline" style="margin:0; width:auto; border-color:#666; color:white;" onclick="window.openEditor('${d.id}')" title="Editar">✏️</button><button class="btn-small btn" style="margin:0; width:auto;" onclick="window.initMassAssignRoutine('${d.id}')" title="Enviar a Atletas">📤</button><button class="btn-small btn-outline" style="margin:0; width:auto; border-color:#666;" onclick="window.viewRoutineFullDetails('${d.id}')" title="Ver Detalle">👁️</button><button class="btn-small btn-danger" style="margin:0; width:auto; border:none;" onclick="delRoutine('${d.id}')" title="Borrar">🗑️</button></div>`;
             l.appendChild(div);
         });
     } catch (e) { l.innerHTML = 'Error.'; }
+};
+
+// --- NUEVA VISTA DETALLADA DE RUTINA (COACH) ---
+window.viewRoutineFullDetails = async (rid) => {
+    try {
+        const docSnap = await getDoc(doc(db, "routines", rid));
+        if(!docSnap.exists()) return alert("Rutina no encontrada");
+        const r = docSnap.data();
+
+        // Obtener nombres de atletas asignados (usando caché si existe)
+        let assignedNamesHtml = '<div style="color:#666; font-size:0.8rem;">Ningún atleta asignado.</div>';
+        if(r.assignedTo && r.assignedTo.length > 0) {
+            // Si no tenemos caché de usuarios, lo intentamos cargar, si no, mostramos IDs
+            let names = [];
+            if(adminUsersCache) {
+                names = r.assignedTo.map(uid => {
+                    const found = adminUsersCache.find(u => u.id === uid);
+                    return found ? found.name : "Usuario desconocido";
+                });
+            } else {
+                // Fallback rápido si no hay caché
+                names = r.assignedTo.map(() => "Usuario (ID)"); 
+            }
+            assignedNamesHtml = `<div style="display:flex; flex-wrap:wrap; gap:5px;">${names.map(n => `<span class="badge green">${n}</span>`).join('')}</div>`;
+        }
+
+        let html = `<div style="margin-bottom:15px;"><h4 style="color:#fff; margin-bottom:5px;">📋 Ejercicios:</h4><ul style="padding-left:20px; color:#ddd;">`;
+        
+        r.exercises.forEach(ex => {
+            const exName = ex.n || ex;
+            const sets = ex.series || 5;
+            const reps = ex.reps || "20-16-16-16-16";
+            const superset = ex.s ? ' <span style="color:var(--accent-color); font-weight:bold;">[SS]</span>' : '';
+            html += `<li style="margin-bottom:8px;"><b>${exName}</b> ${superset}<br><span style="font-size:0.8rem; color:#888;">${sets} series x ${reps}</span></li>`;
+        });
+        html += `</ul></div>`;
+        
+        html += `<div style="border-top:1px solid #333; padding-top:10px;"><h4 style="color:#fff; margin-bottom:5px;">👥 Asignada a:</h4>${assignedNamesHtml}</div>`;
+
+        document.getElementById('detail-title').innerText = r.name;
+        document.getElementById('detail-content').innerHTML = html;
+        window.openModal('modal-details');
+    } catch(e) { console.error(e); alert("Error cargando detalles"); }
 };
 
 window.initMassAssignRoutine = async (rid) => {
@@ -1025,7 +995,120 @@ window.distributePlan = async () => {
     } 
 };
 
-window.viewRoutineContent = (name, dataStr) => { const exs = JSON.parse(decodeURIComponent(dataStr)).map(e => typeof e === 'string' ? e : e.n); let html = `<ul style="padding-left:20px; margin-top:10px;">`; exs.forEach(e => html += `<li style="margin-bottom:5px;">${e}</li>`); html += `</ul>`; document.getElementById('detail-title').innerText = name; document.getElementById('detail-content').innerHTML = html; window.openModal('modal-details'); };
+// --- LOGICA DE VISUALIZACIÓN Y EDICIÓN DE HISTORIAL (MVP) ---
+window.viewWorkoutDetails = (wId, routineName, detailsStr, noteStr, timeStr = "") => { 
+    try { 
+        // 1. Guardar estado global para edición
+        editingHistoryId = wId;
+        currentHistoryDetails = JSON.parse(decodeURIComponent(detailsStr));
+        const note = decodeURIComponent(noteStr || ""); 
+        
+        let timeHtml = timeStr ? `<div style="text-align:center; color:#666; font-size:0.75rem; margin-bottom:10px;">Finalizado: ${timeStr}</div>` : "";
+        
+        // 2. Renderizar contenido (Modo Lectura por defecto)
+        let html = `
+            ${timeHtml}
+            <div class="detail-note-box">📝 ${note || "Sin notas."}</div>
+            <div id="history-details-container">
+                ${renderHistoryHTML(currentHistoryDetails)}
+            </div>
+            <div style="margin-top:20px; text-align:center;">
+                <button id="btn-edit-history" class="btn-outline" style="width:auto; border-color:var(--accent-color); color:var(--accent-color);" onclick="window.enableHistoryEdit()">✏️ EDITAR DATOS</button>
+                <button id="btn-save-history" class="btn hidden" style="width:auto; margin-top:10px;" onclick="window.saveHistoryChanges()">💾 GUARDAR CAMBIOS</button>
+            </div>
+        `;
+        
+        document.getElementById('detail-title').innerText = routineName; 
+        document.getElementById('detail-content').innerHTML = html; 
+        window.openModal('modal-details'); 
+    } catch (e) { console.error(e); alert("Error cargando detalles."); } 
+};
+
+function renderHistoryHTML(details) {
+    let html = '';
+    details.forEach((ex, exIdx) => { 
+        const name = ex.n || ex; const sets = ex.s || []; 
+        html += `<div class="detail-exercise-card"><div class="detail-exercise-title">${name}</div><div class="detail-sets-grid">`; 
+        if (sets.length > 0) { 
+            sets.forEach((s, i) => { 
+                const num = s.numDisplay || (i + 1); const w = s.w || 0; const r = s.r || 0; 
+                const isDrop = s.isDrop ? '<span style="color:var(--warning-color);margin-left:2px">💧</span>' : ''; 
+                const dropStyle = s.isDrop ? 'border: 1px solid var(--warning-color); background: rgba(255, 170, 0, 0.15);' : ''; 
+                
+                // DATA ATTRIBUTES para poder leer los valores al editar
+                html += `<div class="detail-set-badge history-set-item" style="${dropStyle}" data-ex="${exIdx}" data-set="${i}">
+                    <span class="detail-set-num">#${num}</span>
+                    <span class="set-view"><b>${r}</b> <span style="color:#666">x</span> ${w}k</span>
+                    ${isDrop}
+                </div>`; 
+            }); 
+        } else { html += `<div style="font-size:0.7rem; color:#666;">Sin datos.</div>`; } 
+        html += `</div></div>`; 
+    });
+    return html;
+}
+
+window.enableHistoryEdit = () => {
+    const items = document.querySelectorAll('.history-set-item');
+    items.forEach(item => {
+        const exIdx = item.getAttribute('data-ex');
+        const setIdx = item.getAttribute('data-set');
+        const setObj = currentHistoryDetails[exIdx].s[setIdx];
+        
+        // Reemplazar texto por inputs
+        item.innerHTML = `
+            <div style="display:flex; gap:5px; align-items:center;">
+                <input type="number" class="hist-edit-reps" value="${setObj.r}" style="width:40px; padding:2px; margin:0; text-align:center; background:#000; border:1px solid #444;">
+                <span style="color:#666">x</span>
+                <input type="number" class="hist-edit-weight" value="${setObj.w}" style="width:40px; padding:2px; margin:0; text-align:center; background:#000; border:1px solid #444;">
+            </div>
+        `;
+    });
+    document.getElementById('btn-edit-history').classList.add('hidden');
+    document.getElementById('btn-save-history').classList.remove('hidden');
+};
+
+window.saveHistoryChanges = async () => {
+    // 1. Recoger nuevos valores del DOM
+    const items = document.querySelectorAll('.history-set-item');
+    let index = 0;
+    
+    // Recorremos el objeto original y actualizamos con lo que hay en los inputs
+    currentHistoryDetails.forEach((ex) => {
+        ex.s.forEach((set) => {
+            // Buscamos el elemento DOM correspondiente (asumimos orden lineal)
+            const el = items[index];
+            if(el) {
+                const rInput = el.querySelector('.hist-edit-reps');
+                const wInput = el.querySelector('.hist-edit-weight');
+                if(rInput && wInput) {
+                    set.r = parseInt(rInput.value) || 0;
+                    set.w = parseFloat(wInput.value) || 0;
+                }
+            }
+            index++;
+        });
+    });
+
+    // 2. Guardar en Firebase
+    try {
+        const btn = document.getElementById('btn-save-history');
+        btn.innerText = "⏳ GUARDANDO...";
+        await updateDoc(doc(db, "workouts", editingHistoryId), {
+            details: currentHistoryDetails
+        });
+        alert("✅ Historial actualizado.");
+        window.closeModal('modal-details');
+        
+        // Refrescar vistas
+        if(document.getElementById('profile-view').classList.contains('active')) window.loadProfile();
+        if(document.getElementById('coach-detail-view').classList.contains('active')) window.openCoachView(selectedUserCoach, selectedUserObj);
+
+    } catch(e) {
+        console.error(e);
+        alert("Error al guardar cambios.");
+    }
+};
 
 window.openNoticeEditor = async (uid) => { noticeTargetUid = uid; document.getElementById('notice-title').value = ''; document.getElementById('notice-text').value = ''; document.getElementById('notice-img-file').value = ''; document.getElementById('notice-link').value = ''; const modalTitle = document.getElementById('notice-modal-title'); modalTitle.innerText = uid === 'GLOBAL' ? '📢 CREAR AVISO PARA TODOS' : '📢 AVISO INDIVIDUAL'; try { let existing = null; if(uid === 'GLOBAL') { const snap = await getDoc(doc(db, "settings", "globalNotice")); if(snap.exists()) existing = snap.data(); } else { const snap = await getDoc(doc(db, "users", uid)); if(snap.exists() && snap.data().coachNotice) existing = snap.data().coachNotice; } if(existing) { document.getElementById('notice-title').value = existing.title || ''; document.getElementById('notice-text').value = existing.text || ''; document.getElementById('notice-link').value = existing.link || ''; } } catch(e) { console.error(e); } window.openModal('modal-notice-editor'); };
 window.saveNotice = async () => { const t = document.getElementById('notice-title').value; const txt = document.getElementById('notice-text').value; const lnk = document.getElementById('notice-link').value; const fileInp = document.getElementById('notice-img-file'); if(!t || !txt) return alert("Faltan datos."); const btn = document.getElementById('btn-save-notice'); btn.innerText = "SUBIENDO..."; btn.disabled = true; try { let imgUrl = ""; if(fileInp.files.length > 0) { const file = fileInp.files[0]; const snapshot = await uploadBytes(ref(storage, `notices/${noticeTargetUid}/${Date.now()}.jpg`), file); imgUrl = await getDownloadURL(snapshot.ref); } else { if(noticeTargetUid === 'GLOBAL') { const snap = await getDoc(doc(db, "settings", "globalNotice")); if(snap.exists()) imgUrl = snap.data().img || ""; } else { const snap = await getDoc(doc(db, "users", noticeTargetUid)); if(snap.exists() && snap.data().coachNotice) imgUrl = snap.data().coachNotice.img || ""; } } const noticeData = { id: Date.now().toString(), title: t, text: txt, img: imgUrl, link: lnk, date: new Date().toISOString(), active: true }; if(noticeTargetUid === 'GLOBAL') { await setDoc(doc(db, "settings", "globalNotice"), noticeData); alert("✅ Aviso Global"); } else { await updateDoc(doc(db, "users", noticeTargetUid), { coachNotice: noticeData }); alert("✅ Aviso Individual"); } window.closeModal('modal-notice-editor'); } catch(e) { alert("Error: " + e.message); } finally { btn.innerText = "PUBLICAR AVISO"; btn.disabled = false; } };
@@ -1038,7 +1121,6 @@ window.dismissNotice = async () => { if (currentNoticeType === 'GLOBAL') { if(cu
 window.openCoachView = async (uid, u) => {
     selectedUserCoach=uid; 
     
-    // 1. MARCAR COMO VISTO (Actualizamos timestamp)
     updateDoc(doc(db, "users", uid), { lastWorkoutSeen: serverTimestamp() }).catch(e => console.log("Error marking seen", e));
 
     const freshSnap = await getDoc(doc(db, "users", uid)); const freshU = freshSnap.data(); selectedUserObj = freshU;
@@ -1104,9 +1186,8 @@ window.openCoachView = async (uid, u) => {
         if(d.date) { 
             const dObj = d.date.seconds ? new Date(d.date.seconds*1000) : d.date.toDate();
             date = dObj.toLocaleDateString();
-            // Si hay duración guardada, la mostramos. Si no, mostramos la hora.
             infoStr = d.duration ? `⏱️ ${d.duration}` : dObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         }
-        hList.innerHTML += `<div class="history-row" style="grid-template-columns: 60px 1fr 30px 80px;"><div>${date}</div><div style="overflow:hidden; text-overflow:ellipsis;">${d.routine}</div><div>${d.rpe === 'Suave' ? '🟢' : (d.rpe === 'Duro' ? '🟠' : '🔴')}</div><button class="btn-small btn-outline" onclick="viewWorkoutDetails('${d.routine}', '${encodeURIComponent(JSON.stringify(d.details))}', '${encodeURIComponent(d.note||"")}', '${infoStr}')">Ver</button></div>`;
+        hList.innerHTML += `<div class="history-row" style="grid-template-columns: 60px 1fr 30px 80px;"><div>${date}</div><div style="overflow:hidden; text-overflow:ellipsis;">${d.routine}</div><div>${d.rpe === 'Suave' ? '🟢' : (d.rpe === 'Duro' ? '🟠' : '🔴')}</div><button class="btn-small btn-outline" onclick="viewWorkoutDetails('${d.id}', '${d.routine}', '${encodeURIComponent(JSON.stringify(d.details))}', '${encodeURIComponent(d.note||"")}', '${infoStr}')">Ver</button></div>`;
     });
 };
