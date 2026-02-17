@@ -965,6 +965,10 @@ window.dismissNotice = async () => { if (currentNoticeType === 'GLOBAL') { if(cu
 
 window.openCoachView = async (uid, u) => {
     selectedUserCoach=uid; 
+    
+    // 1. MARCAR COMO VISTO (Actualizamos timestamp)
+    updateDoc(doc(db, "users", uid), { lastWorkoutSeen: serverTimestamp() }).catch(e => console.log("Error marking seen", e));
+
     const freshSnap = await getDoc(doc(db, "users", uid)); const freshU = freshSnap.data(); selectedUserObj = freshU;
     switchTab('coach-detail-view'); 
     document.getElementById('coach-user-name').innerText=freshU.name + (freshU.role === 'assistant' ? ' (Coach 🛡️)' : ''); 
@@ -1024,13 +1028,14 @@ window.openCoachView = async (uid, u) => {
     const hList = document.getElementById('coach-history-list'); hList.innerHTML = 'Cargando...';
     const wSnap = await getDocs(query(collection(db,"workouts"), where("uid","==",uid))); hList.innerHTML = wSnap.empty ? 'Sin datos.' : '';
     wSnap.docs.map(doc => ({id: doc.id, ...doc.data()})).sort((a,b) => b.date - a.date).slice(0, 10).forEach(d => {
-        let date = '-', timeStr = '';
+        let date = '-', infoStr = '';
         if(d.date) { 
             const dObj = d.date.seconds ? new Date(d.date.seconds*1000) : d.date.toDate();
             date = dObj.toLocaleDateString();
-            timeStr = dObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            // Si hay duración guardada, la mostramos. Si no, mostramos la hora.
+            infoStr = d.duration ? `⏱️ ${d.duration}` : dObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         }
-        hList.innerHTML += `<div class="history-row" style="grid-template-columns: 60px 1fr 30px 80px;"><div>${date}</div><div style="overflow:hidden; text-overflow:ellipsis;">${d.routine}</div><div>${d.rpe === 'Suave' ? '🟢' : (d.rpe === 'Duro' ? '🟠' : '🔴')}</div><button class="btn-small btn-outline" onclick="viewWorkoutDetails('${d.routine}', '${encodeURIComponent(JSON.stringify(d.details))}', '${encodeURIComponent(d.note||"")}', '${timeStr}')">Ver</button></div>`;
+        hList.innerHTML += `<div class="history-row" style="grid-template-columns: 60px 1fr 30px 80px;"><div>${date}</div><div style="overflow:hidden; text-overflow:ellipsis;">${d.routine}</div><div>${d.rpe === 'Suave' ? '🟢' : (d.rpe === 'Duro' ? '🟠' : '🔴')}</div><button class="btn-small btn-outline" onclick="viewWorkoutDetails('${d.routine}', '${encodeURIComponent(JSON.stringify(d.details))}', '${encodeURIComponent(d.note||"")}', '${infoStr}')">Ver</button></div>`;
     });
 };
 
