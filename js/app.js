@@ -4,7 +4,7 @@ import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, onSnapshot, q
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 import { EXERCISES } from './data.js';
 
-console.log("⚡ FIT DATA: App v11.4 (Smart Notifications + Timer)...");
+console.log("⚡ FIT DATA: App v11.5 (Safety Checks + Clean Dropsets)...");
 
 const firebaseConfig = {
   apiKey: "AIzaSyDW40Lg6QvBc3zaaA58konqsH3QtDrRmyM",
@@ -603,6 +603,7 @@ window.loadRankingView = async () => {
 window.initSwap = (idx) => { swapTargetIndex = idx; const currentEx = activeWorkout.exs[idx]; const muscle = currentEx.mInfo.main; const list = document.getElementById('swap-list'); list.innerHTML = ''; const alternatives = EXERCISES.filter(e => getMuscleInfoByGroup(e.m).main === muscle && e.n !== currentEx.n); if(alternatives.length === 0) list.innerHTML = '<div style="padding:10px;">No hay alternativas directas.</div>'; else alternatives.forEach(alt => { const d = document.createElement('div'); d.style.padding = "10px"; d.style.borderBottom = "1px solid #333"; d.style.cursor = "pointer"; d.innerHTML = `<b>${alt.n}</b>`; d.onclick = () => window.performSwap(alt.n); list.appendChild(d); }); window.openModal('modal-swap'); };
 window.performSwap = (newName) => { if(swapTargetIndex === null) return; const data = getExerciseData(newName); const currentSets = activeWorkout.exs[swapTargetIndex].sets.map(s => ({...s, prev:'-', d: false})); activeWorkout.exs[swapTargetIndex].n = newName; activeWorkout.exs[swapTargetIndex].img = data.img; activeWorkout.exs[swapTargetIndex].video = data.v; activeWorkout.exs[swapTargetIndex].sets = currentSets; saveLocalWorkout(); renderWorkout(); window.closeModal('modal-swap'); };
 
+// --- RENDER WORKOUT UPDATED (DELETE DROPSET BUTTON) ---
 function renderWorkout() {
     const c = document.getElementById('workout-exercises'); c.innerHTML = ''; document.getElementById('workout-title').innerText = activeWorkout.name;
     activeWorkout.exs.forEach((e, i) => {
@@ -612,15 +613,70 @@ function renderWorkout() {
         const swapBtn = `<button class="btn-small btn-outline" style="float:right; width:auto; margin:0 5px 0 0; padding:2px 8px; border-color:#aaa; color:#fff;" onclick="window.initSwap(${i})">🔄</button>`;
         const hasNote = e.note && e.note.length > 0; const noteBtn = `<button class="ex-note-btn ${hasNote ? 'has-note' : ''}" onclick="window.openNoteModal(${i})">📝</button>`;
         let bars = (e.type === 'i') ? `<div class="mini-bar-label"><span>${e.mInfo.main}</span><span>100%</span></div><div class="mini-track"><div class="mini-fill fill-primary"></div></div>` : `<div class="mini-bar-label"><span>${e.mInfo.main}</span><span>70%</span></div><div class="mini-track"><div class="mini-fill fill-primary" style="width:70%"></div></div>`;
+        
         let setsHtml = `<div class="set-header"><div>#</div><div>PREV</div><div>REPS</div><div>KG</div><div></div></div>`;
-        e.sets.forEach((s, j) => { const weightVal = s.w === 0 ? '' : s.w; const isDisabled = s.d ? 'disabled' : ''; const rowOpacity = s.d ? 'opacity:0.5; pointer-events:none;' : ''; const isDropClass = s.isDrop ? 'is-dropset' : ''; const displayNum = s.numDisplay || (j + 1); setsHtml += `<div class="set-row ${isDropClass}" style="${rowOpacity}"><div class="set-num" style="${s.isDrop ? 'color:var(--warning-color); font-size:0.7rem;' : ''}">${displayNum}</div><div class="prev-data">${s.prev}</div><div><input type="number" value="${s.r}" ${isDisabled} onchange="uS(${i},${j},'r',this.value)"></div><div><input type="number" placeholder="kg" value="${weightVal}" ${isDisabled} onchange="uS(${i},${j},'w',this.value)"></div><div style="display:flex; flex-direction:column; gap:2px; pointer-events: auto;"><button id="btn-${i}-${j}" class="btn-outline ${s.d ? 'btn-done' : ''}" style="margin:0;padding:0;height:32px;" onclick="tS(${i},${j})">${s.d ? '✓' : ''}</button>${(!s.d && !s.isDrop) ? `<button class="btn-small btn-outline" style="padding:2px; font-size:0.5rem; border-color:var(--warning-color); color:var(--warning-color);" onclick="window.addDropset(${i},${j})">💧 DROP</button>` : ''}</div></div>`; });
+        e.sets.forEach((s, j) => { 
+            const weightVal = s.w === 0 ? '' : s.w; 
+            const isDisabled = s.d ? 'disabled' : ''; 
+            const rowOpacity = s.d ? 'opacity:0.5; pointer-events:none;' : ''; 
+            const isDropClass = s.isDrop ? 'is-dropset' : ''; 
+            const displayNum = s.numDisplay || (j + 1);
+            
+            // LÓGICA DROPSET: Si es drop, mostramos botón BORRAR (X). Si no, botón DROP.
+            let dropActionBtn = '';
+            if (!s.d) { // Solo si no está completada
+                if (s.isDrop) {
+                    // Botón para borrar la serie drop
+                    dropActionBtn = `<button class="btn-small btn-outline" style="padding:2px 6px; font-size:0.7rem; border-color:#f55; color:#f55; margin-left:auto;" onclick="window.removeSpecificSet(${i},${j})">✕</button>`;
+                } else {
+                    // Botón para crear drop
+                    dropActionBtn = `<button class="btn-small btn-outline" style="padding:2px; font-size:0.5rem; border-color:var(--warning-color); color:var(--warning-color);" onclick="window.addDropset(${i},${j})">DROP</button>`;
+                }
+            }
+
+            setsHtml += `<div class="set-row ${isDropClass}" style="${rowOpacity}">
+                <div class="set-num" style="${s.isDrop ? 'color:var(--warning-color); font-size:0.7rem;' : ''}">${displayNum}</div>
+                <div class="prev-data">${s.prev}</div>
+                <div><input type="number" value="${s.r}" ${isDisabled} onchange="uS(${i},${j},'r',this.value)"></div>
+                <div><input type="number" placeholder="kg" value="${weightVal}" ${isDisabled} onchange="uS(${i},${j},'w',this.value)"></div>
+                <div style="display:flex; flex-direction:column; gap:2px; pointer-events: auto; align-items:center;">
+                    <button id="btn-${i}-${j}" class="btn-outline ${s.d ? 'btn-done' : ''}" style="margin:0;padding:0;height:32px;width:100%;" onclick="tS(${i},${j})">${s.d ? '✓' : ''}</button>
+                    ${dropActionBtn}
+                </div>
+            </div>`; 
+        });
         setsHtml += `<div class="sets-actions"><button class="btn-set-control" style="border-color:var(--success-color); color:var(--success-color); margin-right:auto;" onclick="window.toggleAllSets(${i})">✓ TODO</button><button class="btn-set-control" onclick="removeSet(${i})">- Serie</button><button class="btn-set-control" onclick="addSet(${i})">+ Serie</button></div>`;
         card.innerHTML = `<div class="workout-split"><div class="workout-visual"><img src="${e.img}" onerror="this.src='logo.png'"></div><div class="workout-bars" style="width:100%">${bars}</div></div><h3 style="margin-bottom:10px; border:none; display:flex; align-items:center; justify-content:space-between;"><span>${e.n}</span><div>${noteBtn} ${videoBtnHtml} ${swapBtn}</div></h3>${setsHtml}`;
         c.appendChild(card); if (e.superset) c.innerHTML += connector; 
     });
 }
 
-window.addDropset = (exIdx, setIdx) => { const currentSet = activeWorkout.exs[exIdx].sets[setIdx]; currentSet.d = true; const newSet = { r: Math.floor(currentSet.r * 0.8) || 10, w: Math.floor(currentSet.w * 0.7) || 0, d: false, prev: 'DROPSET', isDrop: true, numDisplay: (parseInt(currentSet.numDisplay) || (setIdx + 1)) + ".5" }; activeWorkout.exs[exIdx].sets.splice(setIdx + 1, 0, newSet); saveLocalWorkout(); renderWorkout(); showToast(`💧 Serie ${newSet.numDisplay} añadida`); };
+// Nueva función para borrar una serie específica (usada en dropsets)
+window.removeSpecificSet = (exIdx, setIdx) => {
+    if(activeWorkout.exs[exIdx].sets.length > 1) {
+        activeWorkout.exs[exIdx].sets.splice(setIdx, 1);
+        saveLocalWorkout();
+        renderWorkout();
+    }
+};
+
+window.addDropset = (exIdx, setIdx) => { 
+    const currentSet = activeWorkout.exs[exIdx].sets[setIdx]; 
+    currentSet.d = true; 
+    // Creamos la nueva serie sin emojis, solo con la propiedad isDrop
+    const newSet = { 
+        r: Math.floor(currentSet.r * 0.8) || 10, 
+        w: Math.floor(currentSet.w * 0.7) || 0, 
+        d: false, 
+        prev: 'DROPSET', 
+        isDrop: true, 
+        numDisplay: (parseInt(currentSet.numDisplay) || (setIdx + 1)) + ".5" 
+    }; 
+    activeWorkout.exs[exIdx].sets.splice(setIdx + 1, 0, newSet); 
+    saveLocalWorkout(); 
+    renderWorkout(); 
+};
+
 window.uS = (i,j,k,v) => { activeWorkout.exs[i].sets[j][k]=v; saveLocalWorkout(); };
 window.tS = async (i, j) => { 
     const s = activeWorkout.exs[i].sets[j]; const exerciseName = activeWorkout.exs[i].n; s.d = !s.d; 
@@ -750,9 +806,17 @@ window.finishWorkout = async (rpeVal) => {
         const note = document.getElementById('workout-notes')?.value || "";
         let totalSets = 0, totalReps = 0, totalKg = 0; let muscleCounts = {};
         
+        let missingWeights = false;
+
         const cleanLog = activeWorkout.exs.map(e => {
             const completedSets = e.sets.filter(set => set.d).map(set => {
-                const r = parseInt(set.r) || 0; const w = parseFloat(set.w) || 0; totalSets++; totalReps += r; totalKg += (r * w);
+                const r = parseInt(set.r) || 0; 
+                const w = parseFloat(set.w) || 0; 
+                
+                // VALIDACIÓN: Chequeamos si hay peso 0 en serie completada
+                if (w === 0) missingWeights = true;
+
+                totalSets++; totalReps += r; totalKg += (r * w);
                 const mName = e.mInfo?.main || "General"; muscleCounts[mName] = (muscleCounts[mName] || 0) + 1;
                 return { r, w, isDrop: !!set.isDrop, numDisplay: String(set.numDisplay || "") };
             });
@@ -761,13 +825,19 @@ window.finishWorkout = async (rpeVal) => {
 
         if (cleanLog.length === 0) { alert("No hay series completadas."); return; }
 
-        // --- CÁLCULO DEL TIEMPO (NUEVO) ---
+        // --- ALERTA DE SEGURIDAD (PESOS VACÍOS) ---
+        if(missingWeights) {
+            if(!confirm("⚠️ ATENCIÓN:\n\nHay series marcadas como hechas pero con 0 kg.\n\n¿Estás seguro de que quieres terminar el entreno así?")) return;
+        }
+        // -------------------------------------------
+
+        // --- CÁLCULO DEL TIEMPO ---
         const startTime = activeWorkout.startTime || Date.now();
         const durationMs = Date.now() - startTime;
         const minutes = Math.floor(durationMs / 60000);
         const seconds = ((durationMs % 60000) / 1000).toFixed(0);
         const durationStr = `${minutes}m ${seconds}s`;
-        // ----------------------------------
+        // --------------------------
 
         const workoutNum = (userData.stats?.workouts || 0) + 1;
         const volumeDisplay = totalKg >= 1000 ? (totalKg / 1000).toFixed(2) + "t" : totalKg.toFixed(0) + "kg";
@@ -782,7 +852,7 @@ window.finishWorkout = async (rpeVal) => {
             details: cleanLog, 
             workoutNumber: workoutNum, 
             sessionVolume: Number(totalKg.toFixed(2)), 
-            duration: durationStr, // <--- GUARDAMOS LA DURACIÓN
+            duration: durationStr, 
             monthKey: currentMonthKey, 
             yearKey: currentYearKey, 
             weekKey: currentWeekKey 
@@ -919,6 +989,7 @@ window.viewPlanContent = async (planName, planId) => { const snap = await getDoc
 window.createPlan = async () => { const name = document.getElementById('new-plan-name').value; const checks = document.querySelectorAll('.plan-check:checked'); if(!name || checks.length === 0) return alert("Pon un nombre y selecciona rutinas"); await addDoc(collection(db, "plans"), { name: name, routines: Array.from(checks).map(c => c.value), createdBy: currentUser.uid }); alert("Plan Creado"); document.getElementById('new-plan-name').value = ''; window.loadAdminPlans(); };
 window.deletePlan = async (id) => { if(confirm("¿Borrar plan?")) { await deleteDoc(doc(db, "plans", id)); window.loadAdminPlans(); } };
 window.openAssignPlanModal = async (planId) => { assignMode = 'plan'; selectedPlanForMassAssign = planId; const list = document.getElementById('assign-users-list'); window.openModal('modal-assign-plan'); try { const snap = await getDoc(doc(db, "plans", planId)); if (snap.exists()) document.getElementById('assign-plan-title').innerText = `Asignar "${snap.data().name}" a:`; let q = userData.role === 'assistant' ? query(collection(db, "users"), where("assignedCoach", "==", currentUser.uid)) : collection(db, "users"); const uSnap = await getDocs(q); list.innerHTML = ''; uSnap.forEach(d => { const u = d.data(); if (u.role === 'athlete') { const div = document.createElement('div'); div.className = "selector-item"; div.innerHTML = `<input type="checkbox" class="user-mass-check selector-checkbox" value="${d.id}" id="u-${d.id}"><label for="u-${d.id}" class="selector-label">${u.name}</label>`; list.appendChild(div); } }); } catch(e) { console.error(e); } };
+
 window.distributePlan = async () => { 
     const checks = document.querySelectorAll('.user-mass-check:checked'); 
     if(checks.length === 0) return alert("Selecciona al menos un cliente."); 
@@ -1039,73 +1110,3 @@ window.openCoachView = async (uid, u) => {
         hList.innerHTML += `<div class="history-row" style="grid-template-columns: 60px 1fr 30px 80px;"><div>${date}</div><div style="overflow:hidden; text-overflow:ellipsis;">${d.routine}</div><div>${d.rpe === 'Suave' ? '🟢' : (d.rpe === 'Duro' ? '🟠' : '🔴')}</div><button class="btn-small btn-outline" onclick="viewWorkoutDetails('${d.routine}', '${encodeURIComponent(JSON.stringify(d.details))}', '${encodeURIComponent(d.note||"")}', '${infoStr}')">Ver</button></div>`;
     });
 };
-
-window.viewWorkoutDetails = (routineName, detailsStr, noteStr, timeStr = "") => { try { const details = JSON.parse(decodeURIComponent(detailsStr)); const note = decodeURIComponent(noteStr || ""); let timeHtml = timeStr ? `<div style="text-align:center; color:#666; font-size:0.75rem; margin-bottom:10px;">Finalizado: ${timeStr}</div>` : ""; let html = `${timeHtml}<div class="detail-note-box">📝 ${note || "Sin notas."}</div>`; details.forEach(ex => { const name = ex.n || ex; const sets = ex.s || []; html += `<div class="detail-exercise-card"><div class="detail-exercise-title">${name}</div><div class="detail-sets-grid">`; if (sets.length > 0) { sets.forEach((s, i) => { const num = s.numDisplay || (i + 1); const w = s.w || 0; const r = s.r || 0; const isDrop = s.isDrop ? '<span style="color:var(--warning-color);margin-left:2px">💧</span>' : ''; const dropStyle = s.isDrop ? 'border: 1px solid var(--warning-color); background: rgba(255, 170, 0, 0.15);' : ''; html += `<div class="detail-set-badge" style="${dropStyle}"><span class="detail-set-num">#${num}</span><span><b>${r}</b> <span style="color:#666">x</span> ${w}k</span>${isDrop}</div>`; }); } else { html += `<div style="font-size:0.7rem; color:#666;">Sin datos.</div>`; } html += `</div></div>`; }); document.getElementById('detail-title').innerText = routineName; document.getElementById('detail-content').innerHTML = html; window.openModal('modal-details'); } catch (e) { console.error(e); alert("Error cargando detalles."); } };
-window.openVideo = (url) => { if (!url) return; let embedUrl = url.includes("watch?v=") ? url.replace("watch?v=", "embed/") : url.replace("youtu.be/", "youtube.com/embed/"); document.getElementById('youtube-frame').src = embedUrl + "?autoplay=1&rel=0"; window.openModal('modal-video'); };
-window.closeVideo = () => { window.closeModal('modal-video'); document.getElementById('youtube-frame').src = ""; };
-window.viewFullImage = (src) => { if (!src || src === window.location.href) return; document.getElementById('full-image-src').src = src; window.openModal('modal-image-viewer'); };
-window.approveUser = async () => { if(!selectedUserCoach) return; if(confirm("¿Aprobar atleta?")) { try { await updateDoc(doc(db, "users", selectedUserCoach), { approved: true }); alert("✅ Aprobado."); openCoachView(selectedUserCoach, selectedUserObj); } catch(e) { alert("Error: " + e.message); } } };
-window.deleteUser = async () => { if(!selectedUserCoach) return; if(prompt("⚠ IRREVERSIBLE: Escribe 'BORRAR' para eliminar:") === 'BORRAR') { try { await deleteDoc(doc(db, "users", selectedUserCoach)); alert("🗑️ Eliminado."); window.loadAdminUsers(); window.switchTab('admin-view'); } catch(e) { alert("Error: " + e.message); } } };
-window.toggleUserFeature = async (feature, value) => { if(!selectedUserCoach) return; await updateDoc(doc(db, "users", selectedUserCoach), { [feature]: value }); openCoachView(selectedUserCoach, selectedUserObj); };
-window.updateUserRole = async (newRole) => { if(!selectedUserCoach) return; if(confirm(`¿Cambiar rol a ${newRole}?`)) { await updateDoc(doc(db,"users",selectedUserCoach), {role: newRole}); alert("Rol actualizado"); openCoachView(selectedUserCoach, selectedUserObj); } };
-window.assignToAssistant = async (assistantId) => { if(!selectedUserCoach) return; await updateDoc(doc(db,"users",selectedUserCoach), {assignedCoach: assistantId}); alert("Atleta reasignado"); openCoachView(selectedUserCoach, selectedUserObj); };
-window.goToCreateRoutine = () => { window.switchTab('routines-view'); window.openEditor(); };
-window.filterCoachRoutines = (text) => { const s = document.getElementById('coach-routine-select'); s.innerHTML = ''; const term = normalizeText(text); const filtered = allRoutinesCache.filter(r => normalizeText(r.name).includes(term)); if(filtered.length === 0) s.innerHTML = '<option value="">No encontrada</option>'; else filtered.forEach(r => { const o = document.createElement('option'); o.value = r.id; o.innerText = r.name; s.appendChild(o); }); };
-window.assignRoutine = async () => { 
-    const rid = document.getElementById('coach-routine-select').value; 
-    if(!rid || rid === "") return alert("❌ Selecciona una rutina."); 
-    
-    try { 
-        await updateDoc(doc(db, "routines", rid), { assignedTo: arrayUnion(selectedUserCoach) }); 
-        await updateDoc(doc(db, "users", selectedUserCoach), { routineOrder: arrayUnion(rid) });
-        alert("✅ Asignada y ordenada al final."); 
-        openCoachView(selectedUserCoach, selectedUserObj); 
-    } catch(e) { alert("Error: " + e.message); } 
-};
-window.assignPlan = async () => { 
-    const planId = document.getElementById('coach-plan-select').value; 
-    if(!planId) return alert("Selecciona un plan."); 
-    try { 
-        const planSnap = await getDoc(doc(db, "plans", planId)); 
-        const planData = planSnap.data();
-        const routinesList = planData.routines; 
-
-        const promises = routinesList.map(rid => updateDoc(doc(db, "routines", rid), { assignedTo: arrayUnion(selectedUserCoach) })); 
-        await Promise.all(promises); 
-
-        await updateDoc(doc(db, "users", selectedUserCoach), { routineOrder: routinesList });
-
-        alert("✅ Plan asignado y ordenado."); 
-        openCoachView(selectedUserCoach, selectedUserObj); 
-    } catch(e) { alert("Error: " + e.message); } 
-};
-window.unassignRoutine = async (rid) => { if(confirm("¿Quitar rutina?")) { await updateDoc(doc(db, "routines", rid), { assignedTo: arrayRemove(selectedUserCoach) }); openCoachView(selectedUserCoach, selectedUserObj); } };
-
-window.exportWorkoutHistory = async () => {
-    const btn = event.currentTarget; const originalContent = btn.innerHTML; if (!window.fullHistoryCache || (!window.fullHistoryCache.recent.length && !window.fullHistoryCache.compressed.length)) { return alert("Primero carga los datos de un ejercicio."); }
-    btn.disabled = true; btn.innerHTML = `<span>⏳</span> GENERANDO...`; btn.style.opacity = "0.7";
-    await new Promise(resolve => setTimeout(resolve, 600));
-    try {
-        let csvContent = "\uFEFFFecha,Rutina,Ejercicio,Series,Reps Totales,Volumen Ejercicio (kg),RPE,Nota\n";
-        const allData = [...window.fullHistoryCache.recent]; 
-        allData.forEach(w => {
-            const date = w.date ? new Date(w.date.seconds * 1000).toLocaleDateString('es-ES') : "-";
-            const routine = `"${(w.routine || "Sin nombre").replace(/"/g, '""')}"`; const rpe = w.rpe || "-"; const note = `"${(w.note || "").replace(/"/g, '""')}"`;
-            if(w.details) w.details.forEach(ex => {
-                let exVolumen = 0; let totalReps = 0;
-                if (ex.s && Array.isArray(ex.s)) { ex.s.forEach(set => { const r = parseInt(set.r) || 0; const weight = parseFloat(set.w) || 0; totalReps += r; exVolumen += (r * weight); }); }
-                csvContent += `${date},${routine},"${ex.n}",${ex.s ? ex.s.length : 0},${totalReps},${exVolumen},${rpe},${note}\n`;
-            });
-        });
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); const fileName = `FitData_${(userData.name || "Usuario").replace(/\s+/g, '_')}.csv`; link.setAttribute("href", url); link.setAttribute("download", fileName); link.style.visibility = 'hidden'; document.body.appendChild(link); link.click(); document.body.removeChild(link); showToast("📊 Archivo CSV descargado");
-    } catch (e) { console.error("Error CSV:", e); alert("Error al generar CSV."); } finally { btn.disabled = false; btn.innerHTML = originalContent; btn.style.opacity = "1"; }
-};
-
-document.getElementById('btn-register').onclick=async()=>{
-    const secretCode = document.getElementById('reg-code').value; const tgUser = document.getElementById('reg-telegram')?.value || ""; 
-    try{ 
-        const c=await createUserWithEmailAndPassword(auth,document.getElementById('reg-email').value,document.getElementById('reg-pass').value);
-        await setDoc(doc(db,"users",c.user.uid),{ name:document.getElementById('reg-name').value, email:document.getElementById('reg-email').value, secretCode: secretCode, telegram: tgUser, approved: false, role: 'athlete', gender:document.getElementById('reg-gender').value, age:parseInt(document.getElementById('reg-age').value), height:parseInt(document.getElementById('reg-height').value), weightHistory: [], measureHistory: [], skinfoldHistory: [], bioHistory: [], prs: {}, stats: {workouts:0, totalKg:0, totalSets:0, totalReps:0}, muscleStats: {}, joined: serverTimestamp(), showVideos: false, showBio: false, showPhotos: false });
-    }catch(e){alert("Error: " + e.message);}
-};
-document.getElementById('btn-login').onclick=()=>signInWithEmailAndPassword(auth,document.getElementById('login-email').value,document.getElementById('login-pass').value).catch(e=>alert(e.message));
