@@ -4,7 +4,7 @@ import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, onSnapshot, q
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 import { EXERCISES } from './data.js';
 
-console.log("⚡ FIT DATA: App v12.1 (Timer Logic Fix + Clean History)...");
+console.log("⚡ FIT DATA: App v12.2 (Notes Fix + Login Fix + History Edit)...");
 
 const firebaseConfig = {
   apiKey: "AIzaSyDW40Lg6QvBc3zaaA58konqsH3QtDrRmyM",
@@ -48,7 +48,7 @@ let currentNoticeId = null;
 let currentNoticeType = null; 
 let deferredPrompt = null; 
 
-// Cache Variables
+// Cache & Edit Variables
 let rankFilterTime = 'all';        
 let rankFilterGender = 'all';     
 let rankFilterCat = 'kg';         
@@ -1036,14 +1036,17 @@ function renderHistoryHTML(details) {
     let html = '';
     details.forEach((ex, exIdx) => { 
         const name = ex.n || ex; const sets = ex.s || []; 
-        html += `<div class="detail-exercise-card"><div class="detail-exercise-title">${name}</div><div class="detail-sets-grid">`; 
+        // --- AQUÍ AÑADIMOS LA NOTA DEL EJERCICIO ---
+        const exNoteHtml = ex.note ? `<div style="font-size:0.75rem; color:#aaa; font-style:italic; margin-top:5px; padding:4px; border-left:2px solid #555; background:#111;">📝 ${ex.note}</div>` : '';
+        
+        html += `<div class="detail-exercise-card"><div class="detail-exercise-title">${name}</div>${exNoteHtml}<div class="detail-sets-grid">`; 
+        
         if (sets.length > 0) { 
             sets.forEach((s, i) => { 
                 const num = s.numDisplay || (i + 1); const w = s.w || 0; const r = s.r || 0; 
-                // SIN GOTA 💧, SOLO COLOR
+                // SIN GOTA 💧
                 const dropStyle = s.isDrop ? 'border: 1px solid var(--warning-color); background: rgba(255, 170, 0, 0.15);' : ''; 
                 
-                // DATA ATTRIBUTES para poder leer los valores al editar
                 html += `<div class="detail-set-badge history-set-item" style="${dropStyle}" data-ex="${exIdx}" data-set="${i}">
                     <span class="detail-set-num">#${num}</span>
                     <span class="set-view"><b>${r}</b> <span style="color:#666">x</span> ${w}k</span>
@@ -1076,14 +1079,11 @@ window.enableHistoryEdit = () => {
 };
 
 window.saveHistoryChanges = async () => {
-    // 1. Recoger nuevos valores del DOM
     const items = document.querySelectorAll('.history-set-item');
     let index = 0;
     
-    // Recorremos el objeto original y actualizamos con lo que hay en los inputs
     currentHistoryDetails.forEach((ex) => {
         ex.s.forEach((set) => {
-            // Buscamos el elemento DOM correspondiente (asumimos orden lineal)
             const el = items[index];
             if(el) {
                 const rInput = el.querySelector('.hist-edit-reps');
@@ -1097,7 +1097,6 @@ window.saveHistoryChanges = async () => {
         });
     });
 
-    // 2. Guardar en Firebase
     try {
         const btn = document.getElementById('btn-save-history');
         btn.innerText = "⏳ GUARDANDO...";
@@ -1107,7 +1106,6 @@ window.saveHistoryChanges = async () => {
         alert("✅ Historial actualizado.");
         window.closeModal('modal-details');
         
-        // Refrescar vistas
         if(document.getElementById('profile-view').classList.contains('active')) window.loadProfile();
         if(document.getElementById('coach-detail-view').classList.contains('active')) window.openCoachView(selectedUserCoach, selectedUserObj);
 
@@ -1194,14 +1192,18 @@ window.openCoachView = async (uid, u) => {
         if(d.date) { 
             const dObj = d.date.seconds ? new Date(d.date.seconds*1000) : d.date.toDate();
             date = dObj.toLocaleDateString();
-            
-            // LÓGICA DE VISUALIZACIÓN DEL TIEMPO EN HISTORIAL
-            if (d.duration) {
-                infoStr = `⏱️ ${d.duration}`;
-            } else {
-                infoStr = dObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            }
+            infoStr = d.duration ? `⏱️ ${d.duration}` : dObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         }
         hList.innerHTML += `<div class="history-row" style="grid-template-columns: 60px 1fr 30px 80px;"><div>${date}</div><div style="overflow:hidden; text-overflow:ellipsis;">${d.routine}</div><div>${d.rpe === 'Suave' ? '🟢' : (d.rpe === 'Duro' ? '🟠' : '🔴')}</div><button class="btn-small btn-outline" onclick="viewWorkoutDetails('${d.id}', '${d.routine}', '${encodeURIComponent(JSON.stringify(d.details))}', '${encodeURIComponent(d.note||"")}', '${infoStr}')">Ver</button></div>`;
     });
 };
+
+document.getElementById('btn-register').onclick=async()=>{
+    const secretCode = document.getElementById('reg-code').value; const tgUser = document.getElementById('reg-telegram')?.value || ""; 
+    try{ 
+        const c=await createUserWithEmailAndPassword(auth,document.getElementById('reg-email').value,document.getElementById('reg-pass').value);
+        await setDoc(doc(db,"users",c.user.uid),{ name:document.getElementById('reg-name').value, email:document.getElementById('reg-email').value, secretCode: secretCode, telegram: tgUser, approved: false, role: 'athlete', gender:document.getElementById('reg-gender').value, age:parseInt(document.getElementById('reg-age').value), height:parseInt(document.getElementById('reg-height').value), weightHistory: [], measureHistory: [], skinfoldHistory: [], bioHistory: [], prs: {}, stats: {workouts:0, totalKg:0, totalSets:0, totalReps:0}, muscleStats: {}, joined: serverTimestamp(), showVideos: false, showBio: false, showPhotos: false });
+    }catch(e){alert("Error: " + e.message);}
+};
+document.getElementById('btn-login').onclick=()=>signInWithEmailAndPassword(auth,document.getElementById('login-email').value,document.getElementById('login-pass').value).catch(e=>alert(e.message));
+console.log("App events attached");
