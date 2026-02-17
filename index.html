@@ -3,245 +3,367 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <link rel="manifest" href="manifest.json">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>FIT DATA LITE</title>
+    <meta name="theme-color" content="#050505">
+    
+    <title>Fit Data Pro</title> 
+    <meta name="apple-mobile-web-app-title" content="Fit Data Pro">
+    <link rel="icon" href="favicon.ico">
     <link rel="apple-touch-icon" href="logo.png">
-    <link rel="icon" href="logo.png" type="image/png">
-    <meta name="theme-color" content="#000000">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&family=Russo+One&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Russo+One&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js" defer></script>
+    <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <div id="splash-screen">
-        <img src="logo.png" alt="FIT DATA LITE" class="pulse-logo" onerror="this.src='https://placehold.co/150/000000/39ff14?text=FIT'">
-        <h1 style="color:white; margin-top:20px; font-family:'Russo One'">FIT DATA LITE</h1>
+
+    <div id="loading-screen">
+        <img src="logo.png" id="loading-logo" onerror="this.style.display='none'">
+        <div class="loading-text">SYSTEM INITIALIZED</div>
     </div>
-    <header id="app-header" class="hidden">
-        <div style="display:flex; align-items:center; gap:10px">
-            <img src="logo.png" alt="Logo" style="height:30px; border-radius:50%">
-            <h2 id="page-title" style="margin:0; font-size:18px">FIT DATA LITE</h2>
+
+    <header id="main-header" class="hidden">
+        <div class="brand">
+            <img src="logo.png" class="header-logo" onerror="this.style.display='none'">
+            <div>FIT DATA <span>PRO</span></div>
         </div>
-        <div style="display:flex; gap:10px">
-            <button id="admin-btn" class="icon-btn hidden" onclick="window.app.navTo('admin')"><i class="material-icons-round" style="color:var(--neon-green)">admin_panel_settings</i></button>
-            <button id="logout-btn" class="icon-btn"><i class="material-icons-round">logout</i></button>
+        <div class="header-actions">
+            <div id="top-btn-coach" class="top-nav-item hidden" onclick="window.loadAdminUsers(); window.switchTab('admin-view');">
+                <span class="top-icon">🛡️</span><span class="top-label" style="color:#ffaa00;">COACH</span>
+            </div>
+            <div id="top-btn-ranking" class="top-nav-item hidden" onclick="window.loadRankingView()">
+                <span class="top-icon">🏆</span><span class="top-label">RANK</span>
+            </div>
+            <div id="top-btn-profile" class="top-nav-item" onclick="window.switchTab('profile-view')">
+                <span class="top-icon">⚙️</span><span class="top-label">PERFIL</span>
+            </div>
+            <div id="top-btn-routines" class="top-nav-item active" onclick="window.switchTab('routines-view')">
+                <span class="top-icon">🏋️</span><span class="top-label">RUTINAS</span>
+            </div>
+            <div id="notif-badge" class="notif-badge" onclick="window.dismissNotif()">🔔</div>
         </div>
     </header>
+
     <main id="main-container">
-        <section id="view-login" class="view active">
-            <div class="login-wrapper" style="text-align:center; padding-top:20px">
-                <img src="logo.png" alt="Logo" width="100" style="border-radius:50%; margin-bottom:20px">
-                <h1 style="color:var(--neon-green)">FIT DATA LITE</h1>
-                <form id="login-form">
-                    <input type="email" id="login-email" placeholder="Email" required style="margin-bottom:10px">
-                    <input type="password" id="login-password" placeholder="Contraseña" required>
-                    <button type="submit" class="btn-primary">ENTRAR</button>
-                </form>
-                <p class="text-link" onclick="window.app.navTo('register')" style="margin-top:20px; color:#888; cursor:pointer">Crear cuenta</p>
-                <div class="install-box">
-                    <div class="install-header"><i class="material-icons-round" style="color:var(--neon-green)">download</i> INSTALAR APP</div>
-                    <div class="install-content">
-                        <div class="install-row"><div class="brand-badge"><i class="material-icons-round">phone_iphone</i> iOS</div><span class="install-desc">Pulsa <i class="material-icons-round tiny">ios_share</i> y <strong>"Añadir a inicio"</strong></span></div>
-                        <div class="install-divider"></div>
-                        <div class="install-row"><div class="brand-badge"><i class="material-icons-round">android</i> Android</div><span class="install-desc">Pulsa <i class="material-icons-round tiny">more_vert</i> y <strong>"Instalar App"</strong></span></div>
+        
+        <section id="auth-view" class="view-container active">
+            <div style="text-align:center; margin: 50px 0;">
+                <img src="logo.png" style="width:110px; border-radius:20px; margin-bottom:15px; box-shadow:0 0 20px rgba(255,51,51,0.3);" onerror="this.src='https://placehold.co/100x100?text=FD'">
+                <h1>ACCESO</h1>
+            </div>
+            <div id="login-form">
+                <input type="email" id="login-email" placeholder="Email">
+                <input type="password" id="login-pass" placeholder="Contraseña">
+                <button class="btn" id="btn-login">ENTRAR</button>
+                <div class="link-text" onclick="window.recoverPass()">¿Olvidaste tu contraseña?</div>
+                <button class="btn-outline" onclick="window.toggleAuth('register')" style="margin-top:30px;">CREAR CUENTA</button>
+                
+                <div id="install-prompt-container" class="install-container hidden">
+                    <div style="font-size:0.7rem; color:#666; margin-bottom:10px; text-transform:uppercase; letter-spacing:1px; border-top:1px solid #333; padding-top:15px; margin-top:20px;">Instalar App</div>
+                    <button id="btn-install-android" class="btn-store hidden">
+                        <span style="font-size:1.2rem;">📲</span> <span>Instalar App</span>
+                    </button>
+                    <div id="ios-install-hint" class="ios-hint hidden">
+                        <span>Para instalar en iPhone:</span>
+                        <div style="margin-top:5px; font-size:0.8rem; color:white;">
+                           Toca <span style="font-size:1.2rem;">📤</span> y selecciona <b>"Añadir a inicio"</b>
+                        </div>
                     </div>
                 </div>
             </div>
-        </section>
-        <section id="view-register" class="view hidden">
-            <h2 class="section-title">NUEVO PERFIL</h2>
-            <form id="register-form">
-                <input type="text" id="reg-name" placeholder="Nombre Completo" required>
-                <input type="email" id="reg-email" placeholder="Email" required>
-                <input type="password" id="reg-pass" placeholder="Contraseña" required>
-                <label style="color:#888; font-size:12px; margin-left:5px">Rol</label>
-                <select id="reg-role-select" style="margin-bottom:15px"><option value="cliente">Cliente</option><option value="atleta">Atleta</option></select>
-                <div class="row"><input type="number" id="reg-age" placeholder="Edad" required style="width: 48%"><select id="reg-sex" style="width: 48%"><option value="male">Hombre</option><option value="female">Mujer</option></select></div>
-                <input type="text" id="reg-code" placeholder="CÓDIGO SECRETO" required class="input-code">
-                <button type="submit" class="btn-primary">REGISTRARSE</button>
-                <button type="button" class="btn-text" onclick="window.app.navTo('login')">Cancelar</button>
-            </form>
-        </section>
-        <section id="view-dashboard" class="view hidden">
-            <div id="pending-approval" class="hidden warning-box">⚠️ Tu cuenta espera aprobación.</div>
-            <div class="section-card" id="weekly-progress-card">
-                <div style="display:flex; justify-content:space-between; margin-bottom:5px"><span>Objetivo Semanal</span><strong id="weekly-count" style="color:var(--neon-green)">0/0</strong></div>
-                <div class="progress-bar-bg"><div id="weekly-bar" class="progress-bar-fill" style="width:0%"></div></div>
-            </div>
-            <h3>Tus Rutinas</h3>
-            <div id="routines-list" class="card-list"></div>
-        </section>
-        <section id="view-admin" class="view hidden">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
-                <h3 style="color:var(--neon-green); margin:0">PANEL COACH</h3>
-                <button class="icon-btn" onclick="window.admin.refreshAll()"><i class="material-icons-round">refresh</i></button>
-            </div>
-            <div class="section-card"><h4>Clientes</h4><div id="admin-users-list" class="users-list-container"></div></div>
-            <div class="section-card" id="routine-editor-card">
-                <h4 id="routine-editor-title">Crear Rutina Base</h4>
-                <input type="text" id="new-routine-name" placeholder="Nombre Rutina (Ej: Pierna A)">
-                <label style="font-size:12px; color:#888">Asignar a:</label>
-                <select id="assign-client-select"><option value="" disabled selected>Selecciona...</option></select>
-                <div class="exercise-selector" style="margin-top:15px; position:relative">
-                    <input type="search" id="exercise-search" placeholder="🔍 Buscar ejercicio..." autocomplete="off">
-                    <div id="search-results-container" class="hidden" style="position:absolute; top:50px; left:0; width:100%; background:#222; border:1px solid #444; border-radius:8px; max-height:200px; overflow-y:auto; z-index:100"></div>
+            <div id="register-form" class="hidden">
+                <input type="text" id="reg-name" placeholder="Nombre">
+                <input type="email" id="reg-email" placeholder="Email">
+                <input type="password" id="reg-pass" placeholder="Contraseña">
+                <select id="reg-gender">
+                    <option value="male">Hombre</option><option value="female">Mujer</option>
+                </select>
+                <div style="display:flex; gap:10px;">
+                    <input type="number" id="reg-age" placeholder="Edad">
+                    <input type="number" id="reg-height" placeholder="Altura (cm)">
                 </div>
-                <div id="admin-routine-preview" style="margin-top:20px; border-top:1px solid #333; padding-top:10px"></div>
-                <div style="display:flex; gap:10px; margin-top:20px">
-                    <button class="btn-primary" id="save-routine-btn" onclick="window.admin.saveRoutine()">GUARDAR</button>
-                    <button class="btn-secondary hidden" id="cancel-edit-btn" onclick="window.admin.cancelEdit()">CANCELAR</button>
-                </div>
-            </div>
-            <div class="section-card">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
-                    <h4>Todas las Rutinas</h4>
-                    <i class="material-icons-round" onclick="window.admin.renderExistingRoutines()" style="cursor:pointer; color:var(--neon-green)">refresh</i>
-                </div>
-                <div id="admin-routines-management" class="users-list-container"></div>
+                <input type="text" id="reg-code" placeholder="CÓDIGO SECRETO">
+                <button class="btn" id="btn-register">REGISTRARSE</button>
+                <button class="btn-outline" onclick="window.toggleAuth('login')">VOLVER</button>
             </div>
         </section>
-        <section id="view-client-detail" class="view hidden">
-            <div class="workout-sticky-header">
-                <button class="icon-btn" onclick="window.app.navTo('admin')"><i class="material-icons-round">arrow_back</i></button>
-                <h3 id="client-detail-name" style="margin:0; font-size:16px">Cliente</h3><div style="width:28px"></div>
-            </div>
-            <div class="section-card" style="text-align:center">
-                <img id="client-detail-img" src="assets/placeholder-body.png" class="profile-avatar" style="width:80px; height:80px; margin:0 auto; border-radius:50%; object-fit:cover">
-                <p id="client-detail-age" style="color:#888; font-size:12px; margin-top:5px">Edad: --</p>
-                <div class="row" style="margin-top:15px; text-align:center">
-                    <div><strong id="cd-weight" style="color:var(--neon-green)">--</strong><div style="font-size:10px">PESO</div></div>
-                    <div><strong id="cd-fat" style="color:#ff3b30">--</strong><div style="font-size:10px">GRASA</div></div>
-                    <div><strong id="cd-muscle" style="color:#00d4ff">--</strong><div style="font-size:10px">MÚSC</div></div>
-                </div>
-                <div style="margin-top:15px; background:#222; padding:10px; border-radius:8px; text-align:left">
-                    <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:5px"><span>Objetivo Semanal</span><strong id="client-weekly-count" style="color:var(--neon-green)">0/0</strong></div>
-                    <div class="progress-bar-bg"><div id="client-weekly-bar" class="progress-bar-fill" style="width:0%"></div></div>
-                </div>
-            </div>
-            <div class="section-card" style="border-left: 4px solid var(--neon-green)">
-                <h4>Rutinas Asignadas</h4>
-                <div id="client-routines-list"></div>
-                <div style="margin-top:15px; border-top:1px solid #333; padding-top:10px">
-                    <label style="font-size:12px; color:#888;">Clonar nueva rutina:</label>
-                    <div style="display:flex; gap:10px"><select id="client-clone-select" style="margin:0"></select><button class="btn-secondary" style="width:auto; margin:0" onclick="window.admin.cloneRoutineFromClientView()">+</button></div>
-                </div>
-            </div>
-            <div class="section-card"><h4>Mapa Muscular</h4><div class="chart-container"><canvas id="clientRadarChart"></canvas></div></div>
-            <div class="section-card"><h4>Evolución Peso</h4><div class="chart-container"><canvas id="clientWeightChart"></canvas></div></div>
-            <div class="section-card"><h4>Grasa %</h4><div class="chart-container"><canvas id="clientFatChart"></canvas></div></div>
-            <div class="section-card"><h4>Músculo %</h4><div class="chart-container"><canvas id="clientMuscleChart"></canvas></div></div>
-            <div class="section-card"><h4>Historial</h4><div id="client-detail-history" class="history-container"></div></div>
+
+        <section id="routines-view" class="view-container">
+            <h2>MIS RUTINAS</h2>
+            <div id="routines-list"></div>
+            <button class="btn-float" onclick="window.openEditor()">+</button>
         </section>
-        <section id="view-workout" class="view hidden">
-            <div class="workout-sticky-header">
-                <div class="timer-box"><span class="timer-label">TIEMPO</span><span id="global-timer">00:00</span></div>
-                <div style="display:flex; gap:5px">
-                    <button onclick="window.workoutManager.cancelWorkout()" class="btn-danger-outline">CANCELAR</button>
-                    <button onclick="window.workoutManager.openFinishModal()" class="btn-finish">FINALIZAR</button>
+
+        <section id="editor-view" class="view-container">
+            <div class="sticky-editor-header">
+                <h2 id="editor-title">NUEVA RUTINA</h2>
+                <div style="display:flex; gap:10px; margin-bottom:10px;">
+                    <input type="text" id="editor-name" placeholder="Nombre de Rutina" style="margin:0;">
+                    <button id="btn-save-routine" class="btn" style="width:auto; padding:0 25px;" onclick="window.saveRoutine()">GUARDAR</button>
                 </div>
+                <input type="search" id="ex-search" placeholder="🔍 Buscar ejercicio..." oninput="window.filterExercises(this.value)" style="margin-bottom:0;">
+                <div class="tip-box" style="margin-top:5px; font-size:0.65rem; padding:5px;">💡 Toca el "🔗" para unir en Superserie con el siguiente.</div>
+                <div id="selected-summary" class="selected-summary"></div>
             </div>
-            <div id="active-exercises-container"></div>
+            <div class="card"><div id="exercise-selector-list"></div></div>
+            <button class="btn-outline" style="border-color:#666;" onclick="window.switchTab('routines-view')">CANCELAR</button>
         </section>
-        <section id="view-profile" class="view hidden">
+
+       <section id="profile-view" class="view-container">
             <div class="profile-header">
-                <div class="avatar-container" onclick="document.getElementById('avatar-input').click()">
-                    <img id="profile-img" src="assets/placeholder-body.png" class="profile-avatar" style="border-radius:50%; object-fit:cover" onerror="this.src='https://placehold.co/150/000000/39ff14?text=FOTO'">
-                    <div class="avatar-overlay"><i class="material-icons-round">photo_camera</i></div>
+                <div class="avatar-circle" onclick="document.getElementById('file-avatar').click()">
+                    <img id="avatar-img" src="" style="display:none;">
+                    <span id="avatar-text" style="font-size:1.5rem; color:var(--accent-color);">U</span>
                 </div>
-                <input type="file" id="avatar-input" hidden accept="image/*" onchange="window.profile.uploadPhoto(this)">
-                <h2 id="profile-name">...</h2>
-                <span id="profile-role-badge" class="role-badge">Cliente</span>
-            </div>
-            <div class="profile-tabs">
-                <button id="tab-btn-stats" class="tab-btn active" onclick="window.profile.switchTab('stats')">Progreso</button>
-                <button id="tab-btn-history" class="tab-btn" onclick="window.profile.switchTab('history')">Historial</button>
-                <button id="tab-btn-config" class="tab-btn" onclick="window.profile.switchTab('config')">Ajustes</button>
-            </div>
-            <div id="tab-stats" class="tab-content">
-                <div class="stats-grid">
-                    <div class="stat-box"><small>TONELADAS</small><strong id="stat-tonnage">0t</strong></div>
-                    <div class="stat-box"><small>SERIES</small><strong id="stat-sets">0</strong></div>
-                    <div class="stat-box"><small>REPS</small><strong id="stat-reps">0</strong></div>
-                    <div class="stat-box"><small>ENTRENOS</small><strong id="stat-workouts">0</strong></div>
+                <input type="file" id="file-avatar" accept="image/*" class="hidden" onchange="window.uploadAvatar(this)">
+                <div style="flex:1; margin-left:10px;">
+                    <h3 id="profile-name" style="margin:0;">Cargando...</h3>
+                    <span style="color:#666; font-size:0.8rem;">Atleta</span>
                 </div>
-                <div class="section-card">
-                    <h3>Actualizar Medidas</h3>
-                    <div class="row"><input type="number" id="stats-weight" placeholder="Peso (kg)" style="width:32%"><input type="number" id="stats-fat" placeholder="% Grasa" style="width:32%"><input type="number" id="stats-muscle" placeholder="% Músc" style="width:32%"></div>
-                    <button class="btn-primary" onclick="window.profile.saveStats()">REGISTRAR</button>
+                <div id="btn-diet-view" class="hidden" onclick="window.openDietView()" style="display:flex; flex-direction:column; align-items:center; cursor:pointer; margin-right:10px;">
+                    <span style="font-size:1.8rem;">🥗</span><span style="font-size:0.6rem; color:var(--success-color); font-weight:bold;">DIETA</span>
                 </div>
-                <div class="section-card"><h3>Peso (kg)</h3><div class="chart-container"><canvas id="weightChart"></canvas></div></div>
-                <div class="section-card"><h3>Grasa (%)</h3><div class="chart-container"><canvas id="fatChart"></canvas></div></div>
-                <div class="section-card"><h3>Músculo (%)</h3><div class="chart-container"><canvas id="muscleChart"></canvas></div></div>
-                <div class="section-card"><h3>Mapa Muscular</h3><div class="chart-container"><canvas id="radarChart"></canvas></div></div>
+                <button class="btn-outline btn-small" style="width:auto; margin:0;" onclick="window.loadProfile()">↻</button>
             </div>
-            <div id="tab-history" class="tab-content hidden"><div id="history-list" class="history-container">Cargando...</div></div>
-            <div id="tab-config" class="tab-content hidden">
-                <div class="section-card">
-                    <h3>Configuración</h3>
-                    <label>Objetivo Semanal (Días):</label><input type="number" id="conf-weekly-goal" placeholder="4">
-                    <label>Tiempo Descanso (seg):</label><input type="number" id="conf-rest-time" placeholder="60">
-                    <button class="btn-secondary" onclick="window.profile.saveSettings()">GUARDAR CAMBIOS</button>
-                    <div class="settings-row" style="margin-top:20px; display:flex; gap:10px">
-                        <button class="btn-icon-large" onclick="window.profile.requestNotify()">🔔 Avisos</button>
-                        <button class="btn-icon-large" onclick="window.profile.testSound()">🔊 Test</button>
+
+            <div class="profile-sub-tabs">
+                <div id="ptab-btn-progress" class="p-tab-btn active" onclick="window.switchProfileSubTab('progress')">PROGRESO</div>
+                <div id="ptab-btn-history" class="p-tab-btn" onclick="window.switchProfileSubTab('history')">HISTORIAL</div>
+                <div id="ptab-btn-settings" class="p-tab-btn" onclick="window.switchProfileSubTab('settings')">AJUSTES</div>
+            </div>
+
+            <div id="tab-content-progress" class="profile-tab-content">
+                <div class="card">
+                    <h3>ESTADÍSTICAS TOTALES</h3>
+                    <div class="stats-grid">
+                        <div class="stat-box"><span class="stat-num" id="stat-workouts">0</span><span class="stat-label">Entrenos</span></div>
+                        <div class="stat-box"><span class="stat-num" id="stat-kg">0</span><span class="stat-label">Kg Movidos</span></div>
+                        <div class="stat-box"><span class="stat-num" id="stat-sets">0</span><span class="stat-label">Series</span></div>
+                        <div class="stat-box"><span class="stat-num" id="stat-reps">0</span><span class="stat-label">Reps</span></div>
                     </div>
                 </div>
+                <div class="card">
+                    <h3>MAPA DE SIMETRÍA</h3>
+                    <div style="height:300px; width:100%; position:relative;"><canvas id="userMuscleChart"></canvas></div>
+                </div>
+                <div class="card" id="user-photos-card">
+                    <h3>EVOLUCIÓN FÍSICA</h3>
+                    <div class="photo-tabs">
+                        <div class="photo-tab active" id="tab-front" onclick="window.switchPose('front')">👤 FRONTAL</div>
+                        <div class="photo-tab" id="tab-back" onclick="window.switchPose('back')">🛡️ ESPALDA</div>
+                    </div>
+                    <div class="compare-wrapper">
+                        <div class="slider-labels"><span class="label-tag">ANTES</span><span class="label-tag">AHORA</span></div>
+                        <img src="" id="img-before" class="compare-img">
+                        <img src="" id="img-overlay" class="compare-img img-overlay">
+                        <div class="slider-handle" id="slider-handle"><div class="slider-btn"></div></div>
+                    </div>
+                    <input type="range" min="0" max="100" value="0" style="width:100%; margin-top:15px;" oninput="window.moveSlider(this.value)">
+                    <div class="photo-actions">
+                        <button class="btn-outline" style="margin:0;" onclick="document.getElementById('f-before').click()">1. ANTES</button>
+                        <button class="btn-danger btn-small" style="margin:0;" onclick="window.deletePhoto('before')">🗑️</button>
+                        <button class="btn-outline" style="margin:0;" onclick="document.getElementById('f-after').click()">2. AHORA</button>
+                        <button class="btn-danger btn-small" style="margin:0;" onclick="window.deletePhoto('after')">🗑️</button>
+                    </div>
+                    <input type="file" id="f-before" class="hidden" accept="image/*" onchange="window.loadCompImg(this,'before')">
+                    <input type="file" id="f-after" class="hidden" accept="image/*" onchange="window.loadCompImg(this,'after')">
+                    <div style="display:flex; justify-content:space-between; margin-top:5px; font-size:0.6rem; color:#888;">
+                        <span id="date-before">-</span><span id="date-after">-</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>PESO CORPORAL</h3>
+                    <div style="height:200px; position:relative; margin-bottom:10px;"><canvas id="weightChart"></canvas></div>
+                    <button class="btn-outline" onclick="window.addWeightEntry()">+ REGISTRAR PESO</button>
+                </div>
+                <div id="user-bio-section" class="card hidden">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><h3 style="margin:0;">⚡ BIOIMPEDANCIA</h3></div>
+                    <div style="height:200px; width:100%; position:relative; margin-bottom:15px;"><canvas id="chartBio"></canvas></div>
+                    <div class="measure-grid">
+                        <div><label style="font-size:0.7rem; color:#aaa;">% Musculatura</label><input type="number" id="bio-muscle" placeholder="%" style="color:var(--success-color); font-weight:bold;"></div>
+                        <div><label style="font-size:0.7rem; color:#aaa;">% Grasa</label><input type="number" id="bio-fat" placeholder="%" style="color:var(--warning-color); font-weight:bold;"></div>
+                    </div>
+                    <button class="btn-small btn-outline" onclick="window.saveBioEntry()">GUARDAR</button>
+                </div>
+                <div id="user-skinfolds-section" class="card hidden">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><h3 style="margin:0;">🤏 PLIEGUES (% GRASA)</h3></div>
+                    <div style="height:200px; width:100%; position:relative; margin-bottom:15px;"><canvas id="chartFat"></canvas></div>
+                    <div class="measure-grid">
+                        <input type="number" id="p-chest" placeholder="Pecho"><input type="number" id="p-axilla" placeholder="Axilar"><input type="number" id="p-tricep" placeholder="Tríceps"><input type="number" id="p-subscap" placeholder="Subescapular"><input type="number" id="p-abdo" placeholder="Abdomen"><input type="number" id="p-supra" placeholder="Suprailiaco"><input type="number" id="p-thigh" placeholder="Muslo">
+                    </div>
+                    <button class="btn-small btn-outline" onclick="window.calculateAndSaveSkinfolds()">CALCULAR Y GUARDAR</button>
+                </div>
+                <div id="user-measures-section" class="card hidden">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><h3 style="margin:0;">📏 MEDIDAS (cm)</h3></div>
+                    <div style="height:250px; width:100%; position:relative; margin-bottom:15px;"><canvas id="chartMeasures"></canvas></div>
+                    <div class="measure-grid">
+                        <input type="number" id="m-chest" placeholder="Pecho"><input type="number" id="m-waist" placeholder="Cintura"><input type="number" id="m-hip" placeholder="Cadera"><input type="number" id="m-arm" placeholder="Brazo"><input type="number" id="m-thigh" placeholder="Muslo"><input type="number" id="m-calf" placeholder="Gemelo"><input type="number" id="m-shoulder" placeholder="Hombros">
+                    </div>
+                    <button class="btn-small btn-outline" onclick="window.saveMeasurements()">GUARDAR MEDIDAS</button>
+                </div>
+            </div>
+
+            <div id="tab-content-history" class="profile-tab-content hidden">
+                <div class="card" style="min-height: 300px;">
+                    <h3>HISTORIAL DE ENTRENOS</h3>
+                    <div id="user-history-list" style="font-size:0.8rem; color:#888;">Cargando historial...</div>
+                    <button class="btn-outline" style="border-color:var(--success-color); color:var(--success-color); margin-top:20px;" onclick="window.openProgress()">📈 GRÁFICA DETALLADA</button>
+                </div>
+            </div>
+
+            <div id="tab-content-settings" class="profile-tab-content hidden">
+                <div class="card">
+                    <h3>CONFIGURACIÓN</h3>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><span>Tiempo Descanso (s)</span><input type="number" id="cfg-rest-time" style="width:80px; margin:0; text-align:center;" value="60"></div>
+                    <div style="margin-bottom:15px; padding-top:10px; border-top:1px solid #333;">
+                        <button class="btn-small btn-outline" style="width:100%; border-color:#444;" onclick="window.enableNotifications()">⌚ VINCULAR NOTIFICACIONES</button>
+                    </div>
+                    <div style="margin-bottom:15px;">
+                        <div style="font-size:0.8rem; color:#aaa; margin-bottom:5px;">Recordatorio Fotos:</div>
+                        <div style="display:flex; gap:10px;">
+                            <select id="photo-day" style="margin:0;"><option value="1">Lunes</option><option value="2">Martes</option><option value="3">Miércoles</option><option value="4">Jueves</option><option value="5">Viernes</option><option value="6">Sábado</option><option value="0">Domingo</option></select>
+                            <input type="time" id="photo-time" value="09:00" style="margin:0;">
+                            <button class="btn-small btn" onclick="window.savePhotoReminder()">OK</button>
+                        </div>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:10px; align-items:center;">
+                        <span>Sonido (Beeps)</span>
+                        <div style="display:flex; gap:10px; align-items:center;"><button class="btn-small btn-outline" style="margin:0; padding:2px 8px; font-size:0.7rem;" onclick="window.testSound()">🔊 PROBAR</button><label class="switch"><input type="checkbox" id="cfg-sound" checked><span class="slider"></span></label></div>
+                    </div>
+                    <div style="display:flex; justify-content:space-between;"><span>Pantalla Activa</span><label class="switch"><input type="checkbox" id="cfg-wake" checked><span class="slider"></span></label></div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #333; padding-top:10px;">
+                        <div><span>🏆 Participar en Ranking</span><br><small style="color:#666; font-size:0.65rem;">Tu nombre y Kg serán públicos</small></div>
+                        <label class="switch"><input type="checkbox" id="cfg-ranking" onchange="window.toggleRankingOptIn(this.checked)"><span class="slider"></span></label>
+                    </div>
+                    <button class="btn-outline" style="margin-top:15px;" onclick="window.saveConfig()">GUARDAR AJUSTES</button>
+                </div>
+                <button class="btn-outline" style="border-color:#500; color:#f55; margin-bottom:20px;" onclick="window.logout()">CERRAR SESIÓN</button>
             </div>
         </section>
+
+        <section id="workout-view" class="view-container">
+            <div style="display:flex; justify-content:space-between; align-items:center; position:fixed; top: calc(var(--header-height) + var(--safe-top)); left: 0; width: 100%; background:var(--bg-color); z-index:4000; padding: 10px 15px; border-bottom:1px solid #222; height: 70px;">
+                <button onclick="window.switchTab('routines-view')" style="background:none; border:none; color:#666; font-size:1.5rem;">✕</button>
+                <div style="text-align:center;"><span style="font-size:0.6rem; color:#666;">TIEMPO</span><br><span id="mini-timer" style="color:var(--accent-color); font-weight:bold;">00:00</span></div>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <button class="btn-danger btn-small" style="margin:0; width:40px; height:40px; display:flex; align-items:center; justify-content:center; border-radius:8px;" onclick="window.cancelWorkout()">🗑️</button>
+                    <button class="btn-small btn" style="margin:0;" onclick="window.promptRPE()">TERMINAR</button>
+                </div>
+            </div>
+            <div style="margin-top: 80px;"> <h2 id="workout-title" style="margin-bottom:20px;">Entreno</h2><div id="workout-exercises"></div></div>
+        </section>
+
+        <section id="ranking-view" class="view-container">
+            <div style="text-align:center; margin-bottom:15px;"><h2 style="color:var(--accent-color); font-family:var(--font-sport); margin:0;">LEADERBOARD</h2><p style="color:#666; font-size:0.7rem;">Compite contra la comunidad</p></div>
+            <div class="rank-filter-row"><span class="filter-label">PERIODO:</span><div class="pill-selector"><div id="time-week" class="pill" onclick="window.changeRankFilter('time', 'week')">📆 SEMANA</div><div id="time-month" class="pill" onclick="window.changeRankFilter('time', 'month')">📅 MES</div><div id="time-year" class="pill" onclick="window.changeRankFilter('time', 'year')">📆 AÑO</div><div id="time-all" class="pill active" onclick="window.changeRankFilter('time', 'all')">♾️ SIEMPRE</div></div></div>
+            <div class="rank-filter-row"><span class="filter-label">LIGA:</span><div class="pill-selector"><div id="gender-all" class="pill active" onclick="window.changeRankFilter('gender', 'all')">🌍 MIXTA</div><div id="gender-male" class="pill" onclick="window.changeRankFilter('gender', 'male')">🚹 HOMBRE</div><div id="gender-female" class="pill" onclick="window.changeRankFilter('gender', 'female')">🚺 MUJER</div></div></div>
+            <div style="margin-bottom:15px;"><span class="filter-label" style="margin-left:5px;">CATEGORÍA:</span><div class="scroll-pills"><div id="cat-kg" class="pill-cat active" onclick="window.changeRankFilter('cat', 'kg')">🏋️ VOLUMEN (Kg)</div><div id="cat-workouts" class="pill-cat" onclick="window.changeRankFilter('cat', 'workouts')">📅 ENTRENOS</div><div id="cat-prs" class="pill-cat" onclick="window.changeRankFilter('cat', 'prs')">🏆 RÉCORDS (PRs)</div><div id="cat-reps" class="pill-cat" onclick="window.changeRankFilter('cat', 'reps')">🔥 REPS TOTALES</div><div id="cat-sets" class="pill-cat" onclick="window.changeRankFilter('cat', 'sets')">📊 SERIES</div></div></div>
+            <div id="ranking-list" class="ranking-list-container"></div>
+            <div class="tip-box" style="margin-top:20px;">💡 Activa "Participar en Ranking" en tu perfil para aparecer aquí.</div>
+        </section>
+
+        <section id="admin-view" class="view-container">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h2>PANEL COACH</h2><button class="btn-small btn-outline" style="width:auto; margin:0;" onclick="window.loadAdminUsers()">🔄</button></div>
+            <div class="admin-tabs"><div id="tab-users" class="admin-tab-btn active" onclick="window.toggleAdminMode('users')">👥 ATLETAS</div><div id="tab-lib" class="admin-tab-btn" onclick="window.toggleAdminMode('lib')">📚 LIBRERÍA</div><div id="tab-plans" class="admin-tab-btn" onclick="window.toggleAdminMode('plans')">📋 PLANES</div></div>
+            
+            <div class="card" id="admin-users-card">
+                <h3>Lista de Atletas</h3>
+                <div id="admin-list"></div>
+                <div class="hidden" style="margin-top:20px; border-top:1px solid #333; padding-top:15px;">
+    <button class="btn-outline" style="border-color:#500; color:#f55; font-size:0.7rem;" onclick="window.runGlobalMigration()">
+        ⚠️ MIGRAR Y LIMPIAR DB (COMPRIMIR)
+    </button>
+</div>
+            </div>
+
+            <div class="card hidden" id="admin-lib-card"><h3>Todas las Rutinas</h3><div id="admin-lib-list"></div></div>
+            <div class="card hidden" id="admin-plans-card">
+                <h3>Planificaciones (Packs)</h3>
+                <div style="background:#1a1a1a; padding:15px; border-radius:8px; border:1px solid #333; margin-bottom:20px;">
+                    <h4 style="margin-top:0; color:var(--accent-color); font-size:0.9rem;">+ Crear Nuevo Plan</h4>
+                    <input type="text" id="new-plan-name" placeholder="Nombre (Ej: Mes 1 Hipertrofia)">
+                    <div id="plan-routine-selector" class="selector-list-container"></div>
+                    <button class="btn-small btn" onclick="window.createPlan()">CREAR PLAN</button>
+                </div>
+                <div id="admin-plans-list" class="plans-grid"></div>
+            </div>
+            <button class="btn-outline" onclick="window.switchTab('routines-view')">VOLVER</button>
+        </section>
+
+        <section id="coach-detail-view" class="view-container">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><button class="btn-outline btn-small" style="width:auto; margin:0;" onclick="window.switchTab('admin-view')">← VOLVER</button><h3 style="margin:0;">FICHA ATLETA</h3></div>
+            <div style="text-align:center; margin-bottom:15px;">
+                <div class="avatar-circle" style="width:80px; height:80px; margin:0 auto 10px auto;"><img id="coach-user-img" src="" style="display:none; cursor:pointer;" onclick="window.viewFullImage(this.src)"><span id="coach-user-initial" style="font-size:2rem; color:var(--accent-color);">U</span></div>
+                <h2 id="coach-user-name" style="margin:0;">Usuario</h2><p id="coach-user-email" style="color:#666; font-size:0.8rem;"></p><div id="coach-user-meta" style="color:#888; font-size:0.7rem; margin-top:5px;"></div>
+                <div id="pending-approval-banner" class="hidden" style="margin-top:15px;"><button class="btn btn-success" onclick="window.approveUser()">✅ APROBAR ACCESO</button></div>
+            </div>
+            <div class="profile-sub-tabs"><div id="ctab-btn-progress" class="p-tab-btn active" onclick="window.switchCoachSubTab('progress')">PROGRESO</div><div id="ctab-btn-history" class="p-tab-btn" onclick="window.switchCoachSubTab('history')">HISTORIAL</div><div id="ctab-btn-profile" class="p-tab-btn" onclick="window.switchCoachSubTab('profile')">PERFIL</div></div>
+            <div id="ctab-content-progress" class="coach-tab-content">
+                <div class="card" id="coach-view-photos"><h3>📸 FOTOS</h3><div class="photo-tabs"><div class="photo-tab active" id="coach-tab-front" onclick="window.switchCoachPose('front')">FRONTAL</div><div class="photo-tab" id="coach-tab-back" onclick="window.switchCoachPose('back')">ESPALDA</div></div><div id="coach-photos-container"></div></div>
+                <div class="card"><h3>GRÁFICA PESO</h3><div style="height:200px; width:100%; position:relative; margin-bottom: 20px;"><canvas id="coachWeightChart"></canvas></div></div>
+                <div class="card"><h3>MAPA MUSCULAR</h3><div style="height:300px; width:100%; position:relative;"><canvas id="coachMuscleChart"></canvas></div></div>
+                <div id="coach-view-bio" class="card hidden"><h3>⚡ BIOIMPEDANCIA</h3><div style="height:200px; width:100%; position:relative;"><canvas id="coachBioChart"></canvas></div></div>
+                <div id="coach-view-skinfolds" class="card hidden"><h3>% GRASA (JP7)</h3><div style="height:200px; width:100%; position:relative;"><canvas id="coachFatChart"></canvas></div></div>
+                <div id="coach-view-measures" class="card hidden"><h3>MEDIDAS (cm)</h3><div style="height:250px; width:100%; position:relative;"><canvas id="coachMeasuresChart"></canvas></div></div>
+            </div>
+            <div id="ctab-content-history" class="coach-tab-content hidden"><div id="coach-stats-text" class="stat-pill-grid" style="margin-bottom:20px;"></div><div class="card" style="min-height:300px;"><h3>HISTORIAL RECIENTE</h3><div id="coach-history-list" style="margin-bottom:15px;"></div></div></div>
+            
+            <div id="ctab-content-profile" class="coach-tab-content hidden">
+                <div class="card"><h3>RUTINAS ASIGNADAS</h3><div id="coach-assigned-list" style="font-size:0.8rem; color:#888; margin-bottom:15px;">Cargando...</div><div style="display:flex; gap:5px; margin-top:5px;"><select id="coach-routine-select" style="margin:0;"></select><button class="btn-small btn-outline" style="width:auto; padding:0 15px;" onclick="window.goToCreateRoutine()">➕ CREAR</button><button class="btn-small btn" style="width:auto; padding:0 15px;" onclick="window.assignRoutine()">ENVIAR</button></div><hr style="border:0; border-top:1px solid #333; margin:15px 0;"><div style="display:flex; gap:5px; margin-top:5px;"><select id="coach-plan-select" style="margin:0;"><option>Cargando planes...</option></select><button class="btn-small btn" style="width:auto; padding:0 15px;" onclick="window.assignPlan()">ASIGNAR PLAN</button></div></div>
+                
+                <div class="card" id="coach-config-card">
+                    <h3>⚙️ CONFIGURACIÓN ATLETA</h3>
+                    <div style="margin-bottom:15px; border-bottom:1px solid #333; padding-bottom:10px;"><div style="display:flex; gap:5px; margin-top:5px;"><select id="coach-diet-select" style="margin:0; flex:1;"><option value="">-- Sin Dieta --</option></select><button class="btn-small btn" style="width:auto;" onclick="window.assignDiet()">GUARDAR</button></div></div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;"><span>Bioimpedancia</span><label class="switch"><input type="checkbox" id="coach-toggle-bio" onchange="window.toggleUserFeature('showBio', this.checked)"><span class="slider"></span></label></div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;"><span>Pliegues</span><label class="switch"><input type="checkbox" id="coach-toggle-skinfolds" onchange="window.toggleUserFeature('showSkinfolds', this.checked)"><span class="slider"></span></label></div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;"><span>Medidas</span><label class="switch"><input type="checkbox" id="coach-toggle-measures" onchange="window.toggleUserFeature('showMeasurements', this.checked)"><span class="slider"></span></label></div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;"><span>Habilitar Fotos</span><label class="switch"><input type="checkbox" id="coach-toggle-photos" onchange="window.toggleUserFeature('showPhotos', this.checked)"><span class="slider"></span></label></div>
+                    <div style="display:flex; justify-content:space-between; margin-top:10px;"><span>Habilitar Vídeos</span><label class="switch"><input type="checkbox" id="coach-toggle-videos" onchange="window.toggleUserFeature('showVideos', this.checked)"><span class="slider"></span></label></div>
+                    
+                    <div style="display:flex; justify-content:space-between; margin-top:10px; border-top:1px solid #333; padding-top:10px;">
+                        <span>🔓 Habilitar Chat Telegram</span>
+                        <label class="switch">
+                            <input type="checkbox" id="coach-toggle-telegram" onchange="window.toggleUserFeature('allowTelegram', this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <button class="btn-danger btn" style="width:100%; margin-bottom:30px;" onclick="window.deleteUser()">🗑️ ELIMINAR ATLETA</button>
+            </div>
+        </section>
+
     </main>
-    <div id="edit-user-modal" class="modal-overlay hidden" style="z-index: 10002;">
-        <div class="modal-content" style="background:#111; padding:20px; border-radius:10px;">
-            <h3>Editar Usuario</h3>
-            <input type="text" id="edit-user-name" placeholder="Nombre">
-            <select id="edit-user-role">
-                <option value="cliente">Cliente</option>
-                <option value="atleta">Atleta</option>
-                <option value="coach">Coach (Admin)</option>
-            </select>
-            <div style="display:flex; gap:10px; margin-top:15px">
-                <button class="btn-primary" onclick="window.admin.saveUserChanges()">GUARDAR</button>
-                <button class="btn-secondary" onclick="document.getElementById('edit-user-modal').classList.add('hidden')">CANCELAR</button>
-            </div>
-        </div>
-    </div>
-    <div id="toast-container"></div>
-    <div id="rest-modal" class="modal-overlay hidden" style="z-index: 10000;">
-        <div class="modal-content" style="background:black; border:2px solid var(--neon-green); padding:30px; border-radius:20px;">
-            <h1 id="rest-countdown">00:00</h1>
-            <button onclick="window.workoutManager.stopRest()" class="btn-primary">¡SEGUIR!</button>
-        </div>
-    </div>
-    <div id="finish-modal" class="modal-overlay hidden" style="z-index: 9998;">
-        <div class="modal-content" style="background:#111; padding:20px; border-radius:10px;">
-            <h3>¿QUÉ TAL FUE?</h3>
-            <div class="traffic-light-container">
-                <button class="traffic-btn green" onclick="window.workoutManager.confirmFinish('Ligero')">😊 FÁCIL</button>
-                <button class="traffic-btn orange" onclick="window.workoutManager.confirmFinish('Moderado')">😐 MEDIO</button>
-                <button class="traffic-btn red" onclick="window.workoutManager.confirmFinish('Intenso')">🔥 DIFICIL</button>
-            </div>
-            <textarea id="final-notes" placeholder="Notas..." style="width:100%"></textarea>
-            <button onclick="document.getElementById('finish-modal').classList.add('hidden')" class="btn-text">Volver</button>
-        </div>
-    </div>
-    <div id="workout-detail-modal" class="modal-overlay hidden" style="z-index: 9997;">
-        <div class="modal-content" style="width:95%; max-height:80vh; overflow-y:auto; text-align:left">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
-                <h3 style="margin:0" id="wd-title">Detalles</h3>
-                <button onclick="document.getElementById('workout-detail-modal').classList.add('hidden')" class="icon-btn"><i class="material-icons-round">close</i></button>
-            </div>
-            <div id="wd-content"></div>
-        </div>
-    </div>
-    <nav id="bottom-nav" class="hidden">
-        <div onclick="window.app.navTo('dashboard')" class="nav-item active"><i class="material-icons-round">dashboard</i><span>Inicio</span></div>
-        <div onclick="window.app.navTo('profile')" class="nav-item"><i class="material-icons-round">person</i><span>Perfil</span></div>
-    </nav>
-    <audio id="timer-beep" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"></audio>
-    <script type="module" src="app.js"></script>
-    <script>setTimeout(function(){var s=document.getElementById('splash-screen');if(s&&!s.classList.contains('hidden'))s.style.display='none';},3000);</script>
+
+    <div id="modal-timer" class="modal"><div class="modal-content timer-content"><h3 style="color:var(--text-dim); letter-spacing:2px; font-size:0.9rem; margin-bottom:15px;">RECUPERACIÓN</h3><div class="timer-circle-container"><svg class="timer-svg" width="200" height="200" viewBox="0 0 200 200"><circle class="timer-bg-ring" cx="100" cy="100" r="90" fill="none" stroke="#222" stroke-width="12"></circle><circle id="timer-progress-ring" class="timer-progress-ring" cx="100" cy="100" r="90" fill="none" stroke="var(--accent-color)" stroke-width="12" stroke-linecap="round" stroke-dasharray="565" stroke-dashoffset="0" transform="rotate(-90 100 100)"></circle></svg><div id="timer-display" class="timer-number">60</div></div><div class="timer-controls"><button class="btn-outline btn-timer-control" onclick="window.addRestTime(20)">+20s</button><button class="btn btn-timer-skip" onclick="window.closeTimer()">¡LISTO!</button><button class="btn-outline btn-timer-control" onclick="window.addRestTime(-10)">-10s</button></div></div></div>
+    
+    <div id="modal-notice-editor" class="modal"><div class="modal-content"><h3 id="notice-modal-title">📢 CREAR AVISO</h3><input type="text" id="notice-title" placeholder="Título"><textarea id="notice-text" rows="4" placeholder="Escribe..." style="background:#222; color:white; border:1px solid #444; border-radius:8px; padding:10px; width:100%;"></textarea><label style="color:#aaa; font-size:0.8rem;">📸 Imagen:</label><input type="file" id="notice-img-file" accept="image/*"><input type="text" id="notice-link" placeholder="Link externo"><button id="btn-save-notice" class="btn" onclick="window.saveNotice()">PUBLICAR AVISO</button><button class="btn-danger btn-small" style="width:100%; margin-top:10px;" onclick="window.deleteNotice()">BORRAR</button><button class="btn-outline" style="margin-top:15px;" onclick="window.closeModal('modal-notice-editor')">CANCELAR</button></div></div>
+    
+    <div id="modal-notice-viewer" class="modal" style="z-index:9000;"><div class="modal-content" style="border-color:var(--warning-color); text-align:left;"><div style="text-align:center; color:var(--warning-color); font-weight:bold; margin-bottom:10px; font-size:0.8rem;" id="viewer-header">AVISO</div><h2 id="viewer-title" style="margin-top:0; color:white; text-align:center;">Título</h2><img id="viewer-img" src="" class="hidden" style="width:100%; border-radius:8px; margin-bottom:15px; border:1px solid #333;"><p id="viewer-text" style="color:#ccc; line-height:1.5; white-space: pre-wrap; margin-bottom:20px;"></p><button id="viewer-link-btn" class="btn hidden" style="margin-bottom:10px; background:#444;">🔗 ABRIR ENLACE</button><button id="btn-dismiss-notice" class="btn" onclick="window.dismissNotice()">ENTENDIDO</button></div></div>
+
+    <div id="modal-assign-plan" class="modal"><div class="modal-content"><h3>ASIGNAR PLAN</h3><p id="assign-plan-title" style="color:var(--accent-color); margin-bottom:10px;">Selecciona atletas:</p><div id="assign-users-list" class="selector-list-container"></div><button class="btn" onclick="window.distributePlan()">✅ ENVIAR</button><button class="btn-outline" style="margin-top:10px;" onclick="window.closeModal('modal-assign-plan')">CANCELAR</button></div></div>
+    <div id="modal-swap" class="modal"><div class="modal-content"><h3>CAMBIAR EJERCICIO</h3><div id="swap-list" style="max-height:300px; overflow-y:auto; text-align:left;"></div><button class="btn-outline" style="margin-top:15px;" onclick="window.closeModal('modal-swap')">CANCELAR</button></div></div>
+    <div id="modal-details" class="modal"><div class="modal-content" style="text-align:left;"><h3 id="detail-title" style="color:var(--accent-color); text-align:center; margin-bottom:15px;">DETALLES</h3><div id="detail-content" style="font-size:0.85rem; max-height:60vh; overflow-y:auto;"></div><button class="btn-outline" style="margin-top:15px;" onclick="window.closeModal('modal-details')">CERRAR</button></div></div>
+    <div id="modal-rpe" class="modal"><div class="modal-content"><h3>FINALIZAR</h3><div style="height: 250px; width: 100%; margin-bottom: 15px;"><canvas id="muscleRadarChart"></canvas></div><p style="color:#888; margin-bottom:20px;">¿Dificultad?</p><button class="rpe-btn rpe-easy" onclick="window.finishWorkout('Suave')">🟢 Suave / Moderado</button><button class="rpe-btn rpe-hard" onclick="window.finishWorkout('Duro')">🟠 Duro / Intenso</button><button class="rpe-btn rpe-max" onclick="window.finishWorkout('Fallo')">🔴 Fallo / Extremo</button><textarea id="workout-notes" rows="3" placeholder="📝 Notas..." style="width:100%; background:#222; border:1px solid #333; color:white; border-radius:8px; padding:10px; margin-top:10px; font-family:inherit;"></textarea><button class="btn-outline" onclick="window.closeModal('modal-rpe')">Cancelar</button></div></div>
+    <div id="modal-progress" class="modal"><div class="modal-content"><h3>📈 EVOLUCIÓN DETALLADA</h3><select id="progress-select" onchange="window.renderProgressChart(this.value)" style="margin-bottom:20px;"></select><div style="height:250px; width:100%; position:relative;"><canvas id="progressChart"></canvas></div><div style="margin-top: 25px; padding-top: 15px; border-top: 1px solid #333;"><button class="btn-small btn-outline" onclick="window.exportWorkoutHistory()" style="width: 100%; border-color: #00ffff; color: #00ffff; display: flex; align-items: center; justify-content: center; gap: 8px;"><span>📥</span> DESCARGAR HISTORIAL (.CSV)</button></div><button class="btn-outline" style="margin-top:20px; width: 100%;" onclick="window.closeModal('modal-progress')">CERRAR</button></div></div>
+    <div id="modal-note" class="modal"><div class="modal-content"><h3>📝 NOTA DE EJERCICIO</h3><textarea id="exercise-note-input" rows="4" placeholder="Ej: Me molestó el hombro..." style="width:100%; background:#222; color:white; border:1px solid #444; border-radius:8px; padding:10px; margin: 15px 0;"></textarea><button class="btn" onclick="window.saveNote()">GUARDAR NOTA</button><button class="btn-outline" onclick="window.closeModal('modal-note')">CANCELAR</button></div></div>
+    <div id="modal-video" class="modal" style="z-index: 3000;"><div class="modal-content" style="width:100%; max-width:600px; padding:10px; background:black;"><div style="position:relative; padding-bottom:56.25%; height:0; overflow:hidden;"><iframe id="youtube-frame" style="position:absolute; top:0; left:0; width:100%; height:100%;" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><button class="btn-danger" style="margin-top:10px; width:100%;" onclick="window.closeVideo()">CERRAR VÍDEO</button></div></div>
+    <div id="modal-diet" class="modal" style="z-index: 3500;"><div class="modal-content" style="width:100%; height:90%; max-width:800px; padding:0; background:white; overflow:hidden; display:flex; flex-direction:column;"><div style="background:#222; padding:10px; display:flex; justify-content:space-between; align-items:center;"><h3 style="margin:0; color:white;">🥗 PLAN NUTRICIONAL</h3><button onclick="window.closeDiet()" style="background:none; border:none; color:white; font-size:1.5rem; cursor:pointer;">✕</button></div><iframe id="diet-frame" style="width:100%; flex:1; border:none;"></iframe></div></div>
+    <div id="modal-image-viewer" class="modal" style="z-index: 5000;"><div class="modal-content" style="background:black; padding:0; width:100%; height:100%; max-width:100%; border:none; display:flex; align-items:center; justify-content:center;"><img id="full-image-src" style="max-width:100%; max-height:100%; object-fit:contain;"><button class="btn-float" style="background:rgba(255,255,255,0.2); color:white; bottom:40px;" onclick="window.closeModal('modal-image-viewer')">✕</button></div></div>
+
+    <script type="module" src="js/app.js"></script>
+    <script>
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            for(let registration of registrations) { registration.unregister().then(function() { console.log('♻️ Service Worker desregistrado correctamente.'); }); }
+        });
+        caches.keys().then(function(names) { for (let name of names) caches.delete(name); });
+    }
+</script>
 </body>
 </html>
-

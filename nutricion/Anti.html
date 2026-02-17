@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plan de Alimentación Simplificado</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+            color: #e0e0e0;
+            line-height: 1.6;
+            padding: 0;
+            margin: 0;
+        }
+
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+            background: #1a1a1a;
+            border: none;
+            border-radius: 0;
+            overflow: hidden;
+            box-shadow: none;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #ff0000 0%, #cc0000 100%);
+            color: white;
+            padding: 25px 15px;
+            text-align: center;
+            border-bottom: 3px solid #ff0000;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 1.8em;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .alert-box {
+            background: rgba(255, 0, 0, 0.1);
+            border-left: 5px solid #ff0000;
+            padding: 20px;
+            margin: 20px;
+            border-radius: 5px;
+        }
+
+        .alert-box strong {
+            color: #ff0000;
+            font-size: 1.2em;
+        }
+
+        .content {
+            padding: 15px;
+        }
+
+        .section {
+            background: #2a2a2a;
+            margin: 15px 0;
+            padding: 20px 15px;
+            border-radius: 10px;
+            border: 1px solid #3a3a3a;
+            transition: all 0.3s ease;
+        }
+
+        .section:hover {
+            border-color: #ff0000;
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.2);
+        }
+
+        .section-title {
+            color: #ff0000;
+            font-size: 1.4em;
+            font-weight: 700;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #ff0000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            line-height: 1.3;
+        }
+
+        .subsection {
+            margin: 20px 0;
+            padding: 20px;
+            background: #222;
+            border-radius: 8px;
+            border-left: 4px solid #ff0000;
+        }
+
+        .subsection-title {
+            color: #ff0000;
+            font-size: 1.3em;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
+        .food-list {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+            margin: 15px 0;
+        }
+
+        .food-item {
+            background: #333;
+            padding: 12px;
+            border-radius: 5px;
+            border: 1px solid #444;
+            transition: all 0.2s ease;
+        }
+
+        .food-item:hover {
+            background: #3a3a3a;
+            border-color: #ff0000;
+            transform: translateX(5px);
+        }
+
+        .food-item::before {
+            content: "▸ ";
+            color: #ff0000;
+            font-weight: bold;
+        }
+
+        .note-box {
+            background: rgba(255, 0, 0, 0.05);
+            border: 2px dashed #ff0000;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+
+        .note-box strong {
+            color: #ff0000;
+        }
+
+        .forbidden-section {
+            background: rgba(255, 0, 0, 0.1);
+            border: 2px solid #ff0000;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        .forbidden-section h4 {
+            color: #ff0000;
+            font-size: 1.2em;
+            margin-bottom: 10px;
+        }
+
+        .forbidden-list {
+            color: #bbb;
+            line-height: 2;
+        }
+
+        .forbidden-list li::before {
+            content: "✖ ";
+            color: #ff0000;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        .allowed-list li::before {
+            content: "✓ ";
+            color: #00ff00;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        ul li {
+            padding: 8px 0;
+        }
+
+        .rules-list {
+            counter-reset: rule-counter;
+        }
+
+        .rules-list li {
+            counter-increment: rule-counter;
+            padding: 12px;
+            margin: 8px 0;
+            background: #2a2a2a;
+            border-radius: 5px;
+            border-left: 3px solid #ff0000;
+        }
+
+        .rules-list li::before {
+            content: counter(rule-counter) ". ";
+            color: #ff0000;
+            font-weight: bold;
+            font-size: 1.2em;
+            margin-right: 10px;
+        }
+
+        .tips-list li {
+            background: #2a2a2a;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 5px;
+            border-left: 3px solid #ff0000;
+        }
+
+        .tips-list li::before {
+            content: "💡 ";
+            margin-right: 10px;
+        }
+
+        .supplement-box {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #ff0000;
+        }
+
+        .supplement-box li {
+            color: #e0e0e0;
+            padding: 8px 0;
+            font-weight: 500;
+        }
+
+        .water-info {
+            background: linear-gradient(135deg, #1a1a1a, #2a2a2a);
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #ff0000;
+            margin: 15px 0;
+        }
+
+        .water-info h4 {
+            color: #ff0000;
+            margin-bottom: 10px;
+        }
+
+        .emoji {
+            font-size: 1.5em;
+            margin-right: 10px;
+        }
+
+        .dressing {
+            background: #333;
+            padding: 12px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border-left: 4px solid #ff0000;
+            font-style: italic;
+            color: #ccc;
+        }
+
+        @media print {
+            body {
+                background: white;
+                color: black;
+            }
+            .container {
+                border: 2px solid black;
+                box-shadow: none;
+            }
+            .section {
+                page-break-inside: avoid;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.6em;
+                letter-spacing: 1px;
+            }
+            .section-title {
+                font-size: 1.2em;
+            }
+            .food-list {
+                grid-template-columns: 1fr;
+            }
+            .alert-box {
+                margin: 15px;
+                padding: 15px;
+            }
+            .subsection {
+                padding: 15px;
+            }
+            .emoji {
+                font-size: 1.2em;
+            }
+        }
+
+        @media (min-width: 769px) {
+            .container {
+                max-width: 1200px;
+                margin: 20px auto;
+                border: 2px solid #ff0000;
+                border-radius: 15px;
+                box-shadow: 0 0 40px rgba(255, 0, 0, 0.3);
+            }
+            
+            body {
+                padding: 20px;
+            }
+
+            .header {
+                position: relative;
+                padding: 40px;
+            }
+
+            .header h1 {
+                font-size: 2.8em;
+                letter-spacing: 3px;
+            }
+
+            .content {
+                padding: 30px;
+            }
+
+            .section {
+                margin: 25px 0;
+                padding: 30px;
+            }
+
+            .section-title {
+                font-size: 1.8em;
+            }
+
+            .food-list {
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Dieta Antiinflamatoria</h1>
+        </div>
+
+        <div class="alert-box">
+            <strong>🔴 IMPORTANTE:</strong> Este plan debe seguirse durante 4-6 semanas para obtener resultados óptimos.
+        </div>
+
+        <div class="content">
+            <!-- Al despertar -->
+            <div class="section">
+                <div class="section-title">
+                    <span class="emoji">💧</span> Al despertar | tan pronto como te levantes
+                </div>
+                <div class="subsection">
+                    <h4 style="color: #ff0000; margin-bottom: 15px;">Hidratación matinal:</h4>
+                    <ul>
+                        <li>▸ 2-3 vasos de agua</li>
+                        <li>▸ Una pizca de sal rosa del Himalaya</li>
+                        <li>▸ Zumo de limón</li>
+                    </ul>
+                </div>
+                <div class="note-box">
+                    <strong>⏱️ Timing:</strong> Espera 10 minutos y toma los suplementos (o antes del entrenamiento).
+                </div>
+            </div>
+
+            <!-- Comida 1 -->
+            <div class="section">
+                <div class="section-title">
+                    <span class="emoji">🍳</span> Comida 1 | Proteína + Grasa
+                </div>
+                
+                <div class="subsection">
+                    <div class="subsection-title">🔴 Proteínas</div>
+                    <p style="color: #888; margin-bottom: 15px;"><em>Elige una opción o combina varias:</em></p>
+                    <div class="food-list">
+                        <div class="food-item">Huevos enteros</div>
+                        <div class="food-item">Carne de ternera</div>
+                        <div class="food-item">Carne de cerdo</div>
+                        <div class="food-item">Aves de corral</div>
+                        <div class="food-item">Salchichas artesanales</div>
+                        <div class="food-item">Salchichón o beicon</div>
+                        <div class="food-item">Atún</div>
+                        <div class="food-item">Sardinas</div>
+                        <div class="food-item">Pescado</div>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <div class="subsection-title">⚪ Grasas</div>
+                    <p style="color: #888; margin-bottom: 15px;"><em>Elige una opción o combina varias:</em></p>
+                    <div class="food-list">
+                        <div class="food-item">Aceite de oliva virgen extra</div>
+                        <div class="food-item">Aceite de coco virgen</div>
+                        <div class="food-item">Mantequilla clarificada (ghee)</div>
+                        <div class="food-item">Aceite de aguacate</div>
+                        <div class="food-item">Aceite de macadamia</div>
+                        <div class="food-item">Aguacate</div>
+                        <div class="food-item">Nueces de macadamia</div>
+                        <div class="food-item">Aceitunas</div>
+                    </div>
+                </div>
+
+                <div class="note-box">
+                    <strong>💡 NOTA:</strong> No cuentes porciones ni calorías. Come hasta sentirte satisfecho.
+                </div>
+            </div>
+
+            <!-- Comida 2 -->
+            <div class="section">
+                <div class="section-title">
+                    <span class="emoji">🥩</span> Comida 2 | Proteína + Grasa + Verduras
+                </div>
+                
+                <div class="subsection">
+                    <div class="subsection-title">🔴 Proteínas</div>
+                    <p style="color: #888; margin-bottom: 15px;"><em>Elige una opción o combina varias:</em></p>
+                    <div class="food-list">
+                        <div class="food-item">Carne de ternera</div>
+                        <div class="food-item">Cerdo</div>
+                        <div class="food-item">Aves de corral</div>
+                        <div class="food-item">Cordero</div>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <div class="subsection-title">🥬 Verduras ilimitadas</div>
+                    <p style="color: #888; margin-bottom: 15px;"><em>Elige una opción o combina varias:</em></p>
+                    <div class="food-list">
+                        <div class="food-item">Espinacas</div>
+                        <div class="food-item">Acelgas</div>
+                        <div class="food-item">Apio</div>
+                        <div class="food-item">Brócoli</div>
+                        <div class="food-item">Zanahoria</div>
+                        <div class="food-item">Coliflor</div>
+                        <div class="food-item">Repollo</div>
+                        <div class="food-item">Espárragos</div>
+                        <div class="food-item">Champiñones</div>
+                        <div class="food-item">Lechuga</div>
+                        <div class="food-item">Berros</div>
+                        <div class="food-item">Rúcula</div>
+                    </div>
+                </div>
+
+                <div class="dressing">
+                    <strong>🥗 Aliño:</strong> Zumo de limón + aceite de oliva + vinagre de manzana + sal
+                </div>
+
+                <div class="note-box">
+                    <strong>💡 NOTA:</strong> No cuentes porciones ni calorías. Come hasta sentirte satisfecho.
+                </div>
+            </div>
+
+            <!-- Comida 3 -->
+            <div class="section">
+                <div class="section-title">
+                    <span class="emoji">🍖</span> Comida 3 | Proteína + Carbohidratos
+                </div>
+                
+                <div class="subsection">
+                    <div class="subsection-title">🔴 Proteínas</div>
+                    <p style="color: #888; margin-bottom: 15px;"><em>Elige una opción o combina varias:</em></p>
+                    <div class="food-list">
+                        <div class="food-item">Huevos enteros</div>
+                        <div class="food-item">Carne de ternera</div>
+                        <div class="food-item">Aves de corral</div>
+                        <div class="food-item">Salchichas artesanales</div>
+                        <div class="food-item">Salchichón o beicon</div>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <div class="subsection-title">🍠 Carbohidratos</div>
+                    <p style="color: #888; margin-bottom: 15px;"><em>Elige una opción o combina varias:</em></p>
+                    <div class="food-list">
+                        <div class="food-item">Boniato</div>
+                        <div class="food-item">Yuca</div>
+                        <div class="food-item">Plátano macho</div>
+                        <div class="food-item">Todo tipo de tubérculos (excepto patata)</div>
+                    </div>
+                </div>
+
+                <div class="dressing">
+                    <strong>🥗 Aliño:</strong> Zumo de limón + aceite de oliva + vinagre de manzana + sal
+                </div>
+
+                <div class="note-box">
+                    <strong>💡 NOTA:</strong> No cuentes porciones ni calorías. Come hasta sentirte satisfecho.
+                </div>
+            </div>
+
+            <!-- Antes de dormir -->
+            <div class="section">
+                <div class="section-title">
+                    <span class="emoji">🌙</span> Antes de dormir
+                </div>
+                
+                <div class="subsection">
+                    <div class="subsection-title">🍇 Frutas permitidas</div>
+                    <div class="food-list">
+                        <div class="food-item">Frutas tropicales</div>
+                        <div class="food-item">Naranja</div>
+                        <div class="food-item">Piña</div>
+                        <div class="food-item">Melón</div>
+                        <div class="food-item">Plátano</div>
+                    </div>
+                </div>
+
+                <div class="supplement-box">
+                    <h4 style="color: #ff0000; margin-bottom: 15px;">💊 Suplementos</h4>
+                    <ul>
+                        <li>▸ <strong>450 mg</strong> de ashwagandha (pastilla)</li>
+                        <li>▸ <strong>2 g</strong> de Omega 3</li>
+                        <li>▸ <strong>400 mg</strong> de magnesio bisglicinato</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Alimentos NO permitidos -->
+            <div class="section">
+                <div class="section-title">
+                    <span class="emoji">❌</span> Alimentos NO permitidos
+                </div>
+
+                <div class="forbidden-section">
+                    <h4>🚫 Grasas prohibidas</h4>
+                    <ul class="forbidden-list">
+                        <li>Aceites vegetales refinados: canola, girasol, palma, cacahuete, soja</li>
+                    </ul>
+                    <ul class="allowed-list" style="margin-top: 10px;">
+                        <li>Únicos aceites permitidos: coco, aguacate y oliva</li>
+                    </ul>
+                </div>
+
+                <div class="forbidden-section">
+                    <h4>🚫 Lácteos</h4>
+                    <ul class="forbidden-list">
+                        <li>Leche, queso, nata, yogur, leche de almendra, margarina</li>
+                    </ul>
+                    <ul class="allowed-list" style="margin-top: 10px;">
+                        <li>Solo permitido: ghee o mantequilla</li>
+                    </ul>
+                </div>
+
+                <div class="forbidden-section">
+                    <h4>🚫 Gluten y cereales</h4>
+                    <ul class="forbidden-list">
+                        <li>Avena, granola, barritas de proteína, cereales integrales, panes</li>
+                    </ul>
+                </div>
+
+                <div class="forbidden-section">
+                    <h4>🚫 Azúcares</h4>
+                    <ul class="forbidden-list">
+                        <li>Edulcorantes artificiales, pasteles, galletas, alcohol</li>
+                    </ul>
+                </div>
+
+                <div class="forbidden-section">
+                    <h4>🚫 Alimentos con lectinas</h4>
+                    <ul class="forbidden-list">
+                        <li>Legumbres: alubias, garbanzos, lentejas</li>
+                        <li>Vegetales con semillas: berenjena, calabaza, tomates, pimientos</li>
+                        <li>Frutas con semillas pequeñas: fresas, cerezas, uvas, manzanas</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Notas importantes -->
+            <div class="section">
+                <div class="section-title">
+                    <span class="emoji">📋</span> Notas importantes
+                </div>
+                
+                <ul style="color: #e0e0e0; line-height: 2;">
+                    <li>🔴 <strong style="color: #ff0000;">Duración:</strong> Sigue el plan durante <strong>4-6 semanas</strong> como mínimo</li>
+                </ul>
+
+                <div class="water-info">
+                    <h4>💧 Hidratación: 2,6 litros de agua al día</h4>
+                    <ul style="margin-top: 10px;">
+                        <li>▸ 500 ml durante el entrenamiento</li>
+                        <li>▸ 250 ml antes de dormir</li>
+                        <li>▸ 250 ml al despertar</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Reglas fundamentales -->
+            <div class="section">
+                <div class="section-title">
+                    <span class="emoji">⚠️</span> Reglas fundamentales
+                </div>
+                
+                <ul class="rules-list">
+                    <li><strong>Come solo cuando tengas hambre</strong></li>
+                    <li>No improvises, sigue el plan</li>
+                    <li>No se permiten tentempiés entre comidas</li>
+                    <li>No cambies el orden de las comidas</li>
+                    <li>No uses condimentos procesados</li>
+                    <li>No aceites vegetales refinados, harinas, azúcares ni lácteos</li>
+                    <li>No edulcorantes artificiales ni miel (solo café solo)</li>
+                    <li>No verduras con lectinas</li>
+                </ul>
+            </div>
+
+            <!-- Consejos prácticos -->
+            <div class="section">
+                <div class="section-title">
+                    <span class="emoji">💡</span> Consejos prácticos
+                </div>
+                
+                <ul class="tips-list">
+                    <li><strong style="color: #ff0000;">Ansiedad:</strong> Añade más grasas por la mañana y más carbohidratos por la noche</li>
+                    <li><strong style="color: #ff0000;">Café:</strong> Nunca uses miel en el café</li>
+                    <li><strong style="color: #ff0000;">Frutos secos:</strong> Solo macadamia (no almendras ni cacahuetes)</li>
+                    <li><strong style="color: #ff0000;">Tubérculos:</strong> Todos permitidos excepto la patata</li>
+                    <li><strong style="color: #ff0000;">Timing:</strong> Mantén el orden de las comidas y come con hambre</li>
+                    <li><strong style="color: #ff0000;">Edulcorantes:</strong> Nunca los consumas</li>
+                </ul>
+            </div>
+
+        </div>
+    </div>
+</body>
+</html>
