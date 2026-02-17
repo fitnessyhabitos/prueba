@@ -4,7 +4,7 @@ import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, onSnapshot, q
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 import { EXERCISES } from './data.js';
 
-console.log("⚡ FIT DATA: App v12.2 (Notes Fix + Login Fix + History Edit)...");
+console.log("⚡ FIT DATA: App v12.3 (Chart Destruction Fix)...");
 
 const firebaseConfig = {
   apiKey: "AIzaSyDW40Lg6QvBc3zaaA58konqsH3QtDrRmyM",
@@ -56,6 +56,7 @@ let adminUsersCache = null;
 let editingHistoryId = null; 
 let currentHistoryDetails = null; 
 
+// Global instances (References kept but mainly managed by ID lookup now)
 let chartInstance = null; let progressChart = null; let fatChartInstance = null; let bioChartInstance = null; let measureChartInstance = null; let coachFatChart = null; let coachBioChart = null; let coachMeasureChart = null; let radarChartInstance = null; let coachChart = null; let userRadarChart = null; let coachRadarChart = null;
 
 let selectedUserCoach = null; 
@@ -220,19 +221,26 @@ window.switchCoachSubTab = (tabName) => {
     const content = document.getElementById(`ctab-content-${tabName}`); if(content) content.classList.remove('hidden');
 };
 
-// --- CHART HELPERS ---
+// --- CHART HELPERS (FIXED DESTRUCTION) ---
 function renderFilteredChart(canvasId, instanceVar, dataHistory, typeKey, color, rangeDays = 9999) {
     const ctx = document.getElementById(canvasId); 
     if (!ctx) return null; 
-    if (instanceVar) instanceVar.destroy();
+
+    // FIX: Destruir buscando en el canvas directamente para evitar errores de referencia
+    const existingChart = Chart.getChart(canvasId);
+    if (existingChart) existingChart.destroy();
+    if (instanceVar) instanceVar.destroy(); // Seguridad extra
+
     const now = Date.now(); 
     const cutoff = now - (rangeDays * 24 * 60 * 60 * 1000);
     const safeData = Array.isArray(dataHistory) ? dataHistory.filter(d => { return d && typeof d === 'object' && d.date && typeof d.date.seconds === 'number'; }) : [];
     const filtered = safeData.filter(d => (d.date.seconds * 1000) > cutoff).sort((a,b) => a.date.seconds - b.date.seconds);
     const labels = filtered.map(d => new Date(d.date.seconds * 1000).toLocaleDateString('es-ES', {day:'2-digit', month:'short'}));
     const values = filtered.map(d => d[typeKey] || 0);
+
     return new Chart(ctx, { type: 'line', data: { labels: labels, datasets: [{ label: typeKey.toUpperCase(), data: values, borderColor: color, backgroundColor: color + '20', tension: 0.3, fill: true, pointRadius: 4, pointBackgroundColor: '#000', pointBorderColor: color }] }, options: { maintainAspectRatio: false, layout: { padding: { top: 10, bottom: 5, left: 5, right: 10 } }, plugins: { legend: { display: false } }, scales: { x: { display: true, ticks: { color: '#666', maxRotation: 45, minRotation: 0, font: {size: 10} }, grid: { display: false } }, y: { grid: { color: '#333' }, ticks: { color: '#888' } } } } });
 }
+
 function injectChartFilter(canvasId, callbackName) {
     const canvas = document.getElementById(canvasId); if(!canvas) return; const parent = canvas.parentElement; if(parent.querySelector('.chart-filter-container')) return;
     const div = document.createElement('div'); div.className = 'chart-filter-container';
@@ -240,8 +248,14 @@ function injectChartFilter(canvasId, callbackName) {
     parent.insertBefore(div, canvas);
 }
 window.updateMeasureChart = (id, range) => { const sourceData = (id === 'coachMeasuresChart') ? selectedUserObj.measureHistory : userData.measureHistory; const instance = (id === 'coachMeasuresChart') ? coachMeasureChart : measureChartInstance; const newInst = renderFilteredMeasureChart(id, instance, sourceData, parseInt(range)); if(id === 'coachMeasuresChart') coachMeasureChart = newInst; else measureChartInstance = newInst; };
+
 function renderFilteredMeasureChart(canvasId, instanceVar, dataHistory, rangeDays) {
-    const ctx = document.getElementById(canvasId); if (!ctx) return null; if (instanceVar) instanceVar.destroy();
+    const ctx = document.getElementById(canvasId); if (!ctx) return null;
+    
+    // FIX: Destrucción segura
+    const existingChart = Chart.getChart(canvasId);
+    if (existingChart) existingChart.destroy();
+    
     const now = Date.now(); const cutoff = now - (rangeDays * 24 * 60 * 60 * 1000);
     const safeData = Array.isArray(dataHistory) ? dataHistory.filter(d => { return d && typeof d === 'object' && d.date && typeof d.date.seconds === 'number'; }) : [];
     const filtered = safeData.filter(d => (d.date.seconds * 1000) > cutoff).sort((a,b) => a.date.seconds - b.date.seconds);
@@ -515,6 +529,7 @@ window.loadRankingView = async () => {
 window.initSwap = (idx) => { swapTargetIndex = idx; const currentEx = activeWorkout.exs[idx]; const muscle = currentEx.mInfo.main; const list = document.getElementById('swap-list'); list.innerHTML = ''; const alternatives = EXERCISES.filter(e => getMuscleInfoByGroup(e.m).main === muscle && e.n !== currentEx.n); if(alternatives.length === 0) list.innerHTML = '<div style="padding:10px;">No hay alternativas directas.</div>'; else alternatives.forEach(alt => { const d = document.createElement('div'); d.style.padding = "10px"; d.style.borderBottom = "1px solid #333"; d.style.cursor = "pointer"; d.innerHTML = `<b>${alt.n}</b>`; d.onclick = () => window.performSwap(alt.n); list.appendChild(d); }); window.openModal('modal-swap'); };
 window.performSwap = (newName) => { if(swapTargetIndex === null) return; const data = getExerciseData(newName); const currentSets = activeWorkout.exs[swapTargetIndex].sets.map(s => ({...s, prev:'-', d: false})); activeWorkout.exs[swapTargetIndex].n = newName; activeWorkout.exs[swapTargetIndex].img = data.img; activeWorkout.exs[swapTargetIndex].video = data.v; activeWorkout.exs[swapTargetIndex].sets = currentSets; saveLocalWorkout(); renderWorkout(); window.closeModal('modal-swap'); };
 
+// --- RENDER WORKOUT (Clean Dropsets + Delete Btn) ---
 function renderWorkout() {
     const c = document.getElementById('workout-exercises'); c.innerHTML = ''; document.getElementById('workout-title').innerText = activeWorkout.name;
     activeWorkout.exs.forEach((e, i) => {
@@ -533,14 +548,12 @@ function renderWorkout() {
             const isDropClass = s.isDrop ? 'is-dropset' : ''; 
             const displayNum = s.numDisplay || (j + 1);
             
-            // LÓGICA DROPSET: Si es drop, mostramos botón BORRAR (X). Si no, botón DROP.
+            // Logic: Drop or Delete
             let dropActionBtn = '';
-            if (!s.d) { // Solo si no está completada
+            if (!s.d) { 
                 if (s.isDrop) {
-                    // Botón para borrar la serie drop
                     dropActionBtn = `<button class="btn-small btn-outline" style="padding:2px 6px; font-size:0.7rem; border-color:#f55; color:#f55; margin-left:auto;" onclick="window.removeSpecificSet(${i},${j})">✕</button>`;
                 } else {
-                    // Botón para crear drop
                     dropActionBtn = `<button class="btn-small btn-outline" style="padding:2px; font-size:0.5rem; border-color:var(--warning-color); color:var(--warning-color);" onclick="window.addDropset(${i},${j})">DROP</button>`;
                 }
             }
@@ -562,7 +575,6 @@ function renderWorkout() {
     });
 }
 
-// Nueva función para borrar una serie específica (usada en dropsets)
 window.removeSpecificSet = (exIdx, setIdx) => {
     if(activeWorkout.exs[exIdx].sets.length > 1) {
         activeWorkout.exs[exIdx].sets.splice(setIdx, 1);
@@ -574,7 +586,6 @@ window.removeSpecificSet = (exIdx, setIdx) => {
 window.addDropset = (exIdx, setIdx) => { 
     const currentSet = activeWorkout.exs[exIdx].sets[setIdx]; 
     currentSet.d = true; 
-    // Creamos la nueva serie sin emojis, solo con la propiedad isDrop
     const newSet = { 
         r: Math.floor(currentSet.r * 0.8) || 10, 
         w: Math.floor(currentSet.w * 0.7) || 0, 
@@ -1047,6 +1058,7 @@ function renderHistoryHTML(details) {
                 // SIN GOTA 💧
                 const dropStyle = s.isDrop ? 'border: 1px solid var(--warning-color); background: rgba(255, 170, 0, 0.15);' : ''; 
                 
+                // DATA ATTRIBUTES para poder leer los valores al editar
                 html += `<div class="detail-set-badge history-set-item" style="${dropStyle}" data-ex="${exIdx}" data-set="${i}">
                     <span class="detail-set-num">#${num}</span>
                     <span class="set-view"><b>${r}</b> <span style="color:#666">x</span> ${w}k</span>
@@ -1126,7 +1138,6 @@ window.dismissNotice = async () => { if (currentNoticeType === 'GLOBAL') { if(cu
 window.openCoachView = async (uid, u) => {
     selectedUserCoach=uid; 
     
-    // 1. MARCAR COMO VISTO (Actualizamos timestamp)
     updateDoc(doc(db, "users", uid), { lastWorkoutSeen: serverTimestamp() }).catch(e => console.log("Error marking seen", e));
 
     const freshSnap = await getDoc(doc(db, "users", uid)); const freshU = freshSnap.data(); selectedUserObj = freshU;
@@ -1206,4 +1217,3 @@ document.getElementById('btn-register').onclick=async()=>{
     }catch(e){alert("Error: " + e.message);}
 };
 document.getElementById('btn-login').onclick=()=>signInWithEmailAndPassword(auth,document.getElementById('login-email').value,document.getElementById('login-pass').value).catch(e=>alert(e.message));
-console.log("App events attached");
