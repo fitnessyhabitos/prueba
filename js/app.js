@@ -748,6 +748,7 @@ window.finishWorkout = async (rpeVal) => {
         window.closeModal('modal-rpe');
         const note = document.getElementById('workout-notes')?.value || "";
         let totalSets = 0, totalReps = 0, totalKg = 0; let muscleCounts = {};
+        
         const cleanLog = activeWorkout.exs.map(e => {
             const completedSets = e.sets.filter(set => set.d).map(set => {
                 const r = parseInt(set.r) || 0; const w = parseFloat(set.w) || 0; totalSets++; totalReps += r; totalKg += (r * w);
@@ -756,11 +757,36 @@ window.finishWorkout = async (rpeVal) => {
             });
             return { n: e.n, s: completedSets, superset: !!e.superset, note: e.note || "" };
         }).filter(e => e.s.length > 0);
+
         if (cleanLog.length === 0) { alert("No hay series completadas."); return; }
+
+        // --- CÁLCULO DEL TIEMPO (NUEVO) ---
+        const startTime = activeWorkout.startTime || Date.now();
+        const durationMs = Date.now() - startTime;
+        const minutes = Math.floor(durationMs / 60000);
+        const seconds = ((durationMs % 60000) / 1000).toFixed(0);
+        const durationStr = `${minutes}m ${seconds}s`;
+        // ----------------------------------
+
         const workoutNum = (userData.stats?.workouts || 0) + 1;
         const volumeDisplay = totalKg >= 1000 ? (totalKg / 1000).toFixed(2) + "t" : totalKg.toFixed(0) + "kg";
         const now = new Date(); const currentMonthKey = `${now.getFullYear()}_${now.getMonth()}`; const currentYearKey = `${now.getFullYear()}`; const currentWeekKey = getWeekNumber(now); 
-        await addDoc(collection(db, "workouts"), { uid: currentUser.uid, date: serverTimestamp(), routine: activeWorkout.name || "Rutina sin nombre", rpe: rpeVal, note: note, details: cleanLog, workoutNumber: workoutNum, sessionVolume: Number(totalKg.toFixed(2)), monthKey: currentMonthKey, yearKey: currentYearKey, weekKey: currentWeekKey });
+        
+        await addDoc(collection(db, "workouts"), { 
+            uid: currentUser.uid, 
+            date: serverTimestamp(), 
+            routine: activeWorkout.name || "Rutina sin nombre", 
+            rpe: rpeVal, 
+            note: note, 
+            details: cleanLog, 
+            workoutNumber: workoutNum, 
+            sessionVolume: Number(totalKg.toFixed(2)), 
+            duration: durationStr, // <--- GUARDAMOS LA DURACIÓN
+            monthKey: currentMonthKey, 
+            yearKey: currentYearKey, 
+            weekKey: currentWeekKey 
+        });
+
         const updates = { "stats.workouts": increment(1), "stats.totalSets": increment(totalSets), "stats.totalReps": increment(totalReps), "stats.totalKg": increment(totalKg), "prs": userData.prs || {}, "lastWorkoutDate": serverTimestamp() };
         updates[`stats_week_${currentWeekKey}.kg`] = increment(totalKg); updates[`stats_week_${currentWeekKey}.workouts`] = increment(1); updates[`stats_week_${currentWeekKey}.reps`] = increment(totalReps);
         updates[`stats_month_${currentMonthKey}.kg`] = increment(totalKg); updates[`stats_month_${currentMonthKey}.workouts`] = increment(1); updates[`stats_month_${currentMonthKey}.reps`] = increment(totalReps); updates[`stats_month_${currentMonthKey}.sets`] = increment(totalSets);
@@ -768,10 +794,9 @@ window.finishWorkout = async (rpeVal) => {
         for (const [muscle, count] of Object.entries(muscleCounts)) { updates[`muscleStats.${muscle}`] = increment(count); }
         await updateDoc(doc(db, "users", currentUser.uid), updates);
         
-        // --- LIMPIEZA AUTO ---
         compressAndCleanupWorkouts(currentUser.uid); 
         
-        showToast(`🏆 ¡Entreno nº ${workoutNum} completado! Vol: ${volumeDisplay}`);
+        showToast(`🏆 ¡Entreno nº ${workoutNum} completado! Tiempo: ${durationStr}`);
         localStorage.removeItem('fit_active_workout'); if (durationInt) clearInterval(durationInt); if (wakeLock) { await wakeLock.release(); wakeLock = null; } window.switchTab('routines-view');
     } catch (error) { console.error("Error finish:", error); alert("Error crítico al guardar. Revisa tu conexión."); }
 };
@@ -821,14 +846,19 @@ window.loadAdminUsers = async () => {
         if(userData.role === 'admin') { const globalNoticeBtn = document.createElement('button'); globalNoticeBtn.className = 'btn'; globalNoticeBtn.style.cssText = "width:100%; margin-bottom:15px; background:var(--warning-color); color:black; font-weight:bold; display:flex; align-items:center; justify-content:center; gap:8px;"; globalNoticeBtn.innerHTML = "📢 CREAR AVISO PARA TODOS"; globalNoticeBtn.onclick = () => window.openNoticeEditor('GLOBAL'); l.appendChild(globalNoticeBtn); }
         const usersList = s.docs.map(d => ({id: d.id, ...d.data()}));
         usersList.sort((a, b) => { const dateA = a.lastWorkoutDate ? a.lastWorkoutDate.seconds : 0; const dateB = b.lastWorkoutDate ? b.lastWorkoutDate.seconds : 0; return dateB - dateA; });
+        
         usersList.forEach(u => {
-            // LÓGICA DE ACTIVIDAD (HOY)
+            // LÓGICA DE NOTIFICACIÓN ROJA INTELIGENTE
             let activeClass = "";
             if (u.lastWorkoutDate) { 
                 const last = u.lastWorkoutDate.toDate(); 
                 const today = new Date(); 
                 const isToday = last.getDate() === today.getDate() && last.getMonth() === today.getMonth() && last.getFullYear() === today.getFullYear(); 
-                if (isToday) activeClass = "avatar-active-today"; 
+                
+                // ¿Es nuevo? (No visto O la fecha del entreno es mayor a la fecha de visto)
+                const isUnseen = !u.lastWorkoutSeen || (u.lastWorkoutDate.seconds > u.lastWorkoutSeen.seconds);
+
+                if (isToday && isUnseen) activeClass = "avatar-active-today"; 
             }
 
             const avatarHtml = u.photo 
