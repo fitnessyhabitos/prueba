@@ -207,3 +207,16 @@ input:checked + .slider { background-color: var(--accent-color); } input:checked
 .chart-filter-container { display: flex; justify-content: flex-end; margin-bottom: 10px; gap: 10px; }
 .chart-filter-select { background: #111; color: #fff; border: 1px solid #333; border-radius: 6px; padding: 4px 8px; font-size: 0.75rem; width: auto; margin: 0; }
 canvas { padding-bottom: 5px; }
+
+/* --- NUEVO: Borde Rojo para Atletas Activos --- */
+.avatar-active-today {
+    border: 2px solid var(--accent-color) !important;
+    box-shadow: 0 0 15px var(--accent-color) !important;
+    animation: breathe 2s infinite; /* Efecto de respiración suave */
+}
+
+/* Ajuste para que el placeholder (letra) también brille si no hay foto */
+.mini-avatar-placeholder.avatar-active-today {
+    border-color: var(--accent-color) !important;
+    color: var(--accent-color) !important;
+}
