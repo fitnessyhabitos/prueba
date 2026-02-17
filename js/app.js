@@ -4,7 +4,7 @@ import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, onSnapshot, q
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 import { EXERCISES } from './data.js';
 
-console.log("⚡ FIT DATA: App v12.0 (History Editing + Advanced Routine View)...");
+console.log("⚡ FIT DATA: App v12.1 (Timer Logic Fix + Clean History)...");
 
 const firebaseConfig = {
   apiKey: "AIzaSyDW40Lg6QvBc3zaaA58konqsH3QtDrRmyM",
@@ -52,9 +52,9 @@ let deferredPrompt = null;
 let rankFilterTime = 'all';        
 let rankFilterGender = 'all';     
 let rankFilterCat = 'kg';         
-let adminUsersCache = null; // Cache para lista de usuarios (Coach)
-let editingHistoryId = null; // ID del workout que se está editando en el historial
-let currentHistoryDetails = null; // Datos temporales de edición
+let adminUsersCache = null; 
+let editingHistoryId = null; 
+let currentHistoryDetails = null; 
 
 let chartInstance = null; let progressChart = null; let fatChartInstance = null; let bioChartInstance = null; let measureChartInstance = null; let coachFatChart = null; let coachBioChart = null; let coachMeasureChart = null; let radarChartInstance = null; let coachChart = null; let userRadarChart = null; let coachRadarChart = null;
 
@@ -287,9 +287,14 @@ window.loadProfile = async () => {
         histDiv.innerHTML = workouts.length ? '' : "Sin historial.";
         workouts.forEach(d => {
             let dateStr = '-', timeStr = '';
-            if(d.date) { const dateObj = d.date.toDate ? d.date.toDate() : new Date(d.date.seconds*1000); dateStr = dateObj.toLocaleDateString('es-ES', {day:'2-digit', month:'short'}); timeStr = d.duration ? `⏱️ ${d.duration}` : dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); }
+            if(d.date) { 
+                const dateObj = d.date.toDate ? d.date.toDate() : new Date(d.date.seconds*1000); 
+                dateStr = dateObj.toLocaleDateString('es-ES', {day:'2-digit', month:'short'}); 
+                timeStr = d.duration ? `⏱️ ${d.duration}` : dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            }
             let rpeColor = 'rpe-easy'; if(d.rpe === 'Duro' || d.rpe === 'Intenso') rpeColor = 'rpe-hard'; if(d.rpe === 'Fallo' || d.rpe === 'Extremo') rpeColor = 'rpe-max';
             const detailsStr = d.details ? encodeURIComponent(JSON.stringify(d.details)) : ""; const noteStr = d.note ? encodeURIComponent(d.note) : "";
+            
             const btnVer = d.details ? `<button class="btn-small btn-outline" style="margin:0; padding:2px 6px;" onclick="window.viewWorkoutDetails('${d.id}', '${d.routine}', '${detailsStr}', '${noteStr}', '${timeStr}')">🔍</button>` : '';
             histDiv.innerHTML += `<div class="history-row"><div style="color:var(--accent-color); font-weight:bold;">${dateStr}</div><div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:5px;">${d.routine}</div><div style="display:flex; justify-content:center;"><span class="rpe-dot ${rpeColor}" title="${d.rpe}"></span></div><div style="text-align:right;">${btnVer}</div></div>`;
         });
@@ -737,13 +742,16 @@ window.finishWorkout = async (rpeVal) => {
         }
         // -------------------------------------------
 
-        // --- CÁLCULO DEL TIEMPO ---
+        // --- CÁLCULO DEL TIEMPO (CORREGIDO HORAS) ---
         const startTime = activeWorkout.startTime || Date.now();
         const durationMs = Date.now() - startTime;
-        const minutes = Math.floor(durationMs / 60000);
-        const seconds = ((durationMs % 60000) / 1000).toFixed(0);
-        const durationStr = `${minutes}m ${seconds}s`;
-        // --------------------------
+        
+        const h = Math.floor(durationMs / 3600000);
+        const m = Math.floor((durationMs % 3600000) / 60000);
+        const s = Math.floor((durationMs % 60000) / 1000);
+        
+        const durationStr = h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
+        // ---------------------------------------------
 
         const workoutNum = (userData.stats?.workouts || 0) + 1;
         const volumeDisplay = totalKg >= 1000 ? (totalKg / 1000).toFixed(2) + "t" : totalKg.toFixed(0) + "kg";
@@ -1032,14 +1040,13 @@ function renderHistoryHTML(details) {
         if (sets.length > 0) { 
             sets.forEach((s, i) => { 
                 const num = s.numDisplay || (i + 1); const w = s.w || 0; const r = s.r || 0; 
-                const isDrop = s.isDrop ? '<span style="color:var(--warning-color);margin-left:2px">💧</span>' : ''; 
+                // SIN GOTA 💧, SOLO COLOR
                 const dropStyle = s.isDrop ? 'border: 1px solid var(--warning-color); background: rgba(255, 170, 0, 0.15);' : ''; 
                 
                 // DATA ATTRIBUTES para poder leer los valores al editar
                 html += `<div class="detail-set-badge history-set-item" style="${dropStyle}" data-ex="${exIdx}" data-set="${i}">
                     <span class="detail-set-num">#${num}</span>
                     <span class="set-view"><b>${r}</b> <span style="color:#666">x</span> ${w}k</span>
-                    ${isDrop}
                 </div>`; 
             }); 
         } else { html += `<div style="font-size:0.7rem; color:#666;">Sin datos.</div>`; } 
@@ -1121,6 +1128,7 @@ window.dismissNotice = async () => { if (currentNoticeType === 'GLOBAL') { if(cu
 window.openCoachView = async (uid, u) => {
     selectedUserCoach=uid; 
     
+    // 1. MARCAR COMO VISTO (Actualizamos timestamp)
     updateDoc(doc(db, "users", uid), { lastWorkoutSeen: serverTimestamp() }).catch(e => console.log("Error marking seen", e));
 
     const freshSnap = await getDoc(doc(db, "users", uid)); const freshU = freshSnap.data(); selectedUserObj = freshU;
@@ -1186,7 +1194,13 @@ window.openCoachView = async (uid, u) => {
         if(d.date) { 
             const dObj = d.date.seconds ? new Date(d.date.seconds*1000) : d.date.toDate();
             date = dObj.toLocaleDateString();
-            infoStr = d.duration ? `⏱️ ${d.duration}` : dObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            // LÓGICA DE VISUALIZACIÓN DEL TIEMPO EN HISTORIAL
+            if (d.duration) {
+                infoStr = `⏱️ ${d.duration}`;
+            } else {
+                infoStr = dObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            }
         }
         hList.innerHTML += `<div class="history-row" style="grid-template-columns: 60px 1fr 30px 80px;"><div>${date}</div><div style="overflow:hidden; text-overflow:ellipsis;">${d.routine}</div><div>${d.rpe === 'Suave' ? '🟢' : (d.rpe === 'Duro' ? '🟠' : '🔴')}</div><button class="btn-small btn-outline" onclick="viewWorkoutDetails('${d.id}', '${d.routine}', '${encodeURIComponent(JSON.stringify(d.details))}', '${encodeURIComponent(d.note||"")}', '${infoStr}')">Ver</button></div>`;
     });
