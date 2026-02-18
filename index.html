@@ -237,7 +237,8 @@
                     </div>
                     <div style="display:flex; justify-content:space-between;"><span>Pantalla Activa</span><label class="switch"><input type="checkbox" id="cfg-wake" checked><span class="slider"></span></label></div>
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #333; padding-top:10px;">
-                        <div><span>🏆 Participar en Ranking</span><br><small style="color:#666; font-size:0.65rem;">Tu nombre y Kg serán públicos</small></div>
+                        <div><span>🏆 Participar en Ranking</span>
+<small style="color:#666; font-size:0.65rem;">Tu nombre y Kg serán públicos</small></div>
                         <label class="switch"><input type="checkbox" id="cfg-ranking" onchange="window.toggleRankingOptIn(this.checked)"><span class="slider"></span></label>
                     </div>
                     <button class="btn-outline" style="margin-top:15px;" onclick="window.saveConfig()">GUARDAR AJUSTES</button>
@@ -249,7 +250,8 @@
         <section id="workout-view" class="view-container">
             <div style="display:flex; justify-content:space-between; align-items:center; position:fixed; top: calc(var(--header-height) + var(--safe-top)); left: 0; width: 100%; background:var(--bg-color); z-index:4000; padding: 10px 15px; border-bottom:1px solid #222; height: 70px;">
                 <button onclick="window.switchTab('routines-view')" style="background:none; border:none; color:#666; font-size:1.5rem;">✕</button>
-                <div style="text-align:center;"><span style="font-size:0.6rem; color:#666;">TIEMPO</span><br><span id="mini-timer" style="color:var(--accent-color); font-weight:bold;">00:00</span></div>
+                <div style="text-align:center;"><span style="font-size:0.6rem; color:#666;">TIEMPO</span>
+<span id="mini-timer" style="color:var(--accent-color); font-weight:bold;">00:00</span></div>
                 <div style="display:flex; gap:10px; align-items:center;">
                     <button class="btn-danger btn-small" style="margin:0; width:40px; height:40px; display:flex; align-items:center; justify-content:center; border-radius:8px;" onclick="window.cancelWorkout()">🗑️</button>
                     <button class="btn-small btn" style="margin:0;" onclick="window.promptRPE()">TERMINAR</button>
@@ -325,13 +327,6 @@
                     <div style="display:flex; justify-content:space-between; margin-bottom:10px;"><span>Habilitar Fotos</span><label class="switch"><input type="checkbox" id="coach-toggle-photos" onchange="window.toggleUserFeature('showPhotos', this.checked)"><span class="slider"></span></label></div>
                     <div style="display:flex; justify-content:space-between; margin-top:10px;"><span>Habilitar Vídeos</span><label class="switch"><input type="checkbox" id="coach-toggle-videos" onchange="window.toggleUserFeature('showVideos', this.checked)"><span class="slider"></span></label></div>
                     
-                    <div style="display:flex; justify-content:space-between; margin-top:10px; border-top:1px solid #333; padding-top:10px;">
-                        <span>🔓 Habilitar Chat Telegram</span>
-                        <label class="switch">
-                            <input type="checkbox" id="coach-toggle-telegram" onchange="window.toggleUserFeature('allowTelegram', this.checked)">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
                 </div>
 
                 <button class="btn-danger btn" style="width:100%; margin-bottom:30px;" onclick="window.deleteUser()">🗑️ ELIMINAR ATLETA</button>
@@ -346,7 +341,8 @@
     
     <div id="modal-notice-viewer" class="modal" style="z-index:9000;"><div class="modal-content" style="border-color:var(--warning-color); text-align:left;"><div style="text-align:center; color:var(--warning-color); font-weight:bold; margin-bottom:10px; font-size:0.8rem;" id="viewer-header">AVISO</div><h2 id="viewer-title" style="margin-top:0; color:white; text-align:center;">Título</h2><img id="viewer-img" src="" class="hidden" style="width:100%; border-radius:8px; margin-bottom:15px; border:1px solid #333;"><p id="viewer-text" style="color:#ccc; line-height:1.5; white-space: pre-wrap; margin-bottom:20px;"></p><button id="viewer-link-btn" class="btn hidden" style="margin-bottom:10px; background:#444;">🔗 ABRIR ENLACE</button><button id="btn-dismiss-notice" class="btn" onclick="window.dismissNotice()">ENTENDIDO</button></div></div>
 
-    <div id="modal-assign-plan" class="modal"><div class="modal-content"><h3>ASIGNAR PLAN</h3><p id="assign-plan-title" style="color:var(--accent-color); margin-bottom:10px;">Selecciona atletas:</p><div id="assign-users-list" class="selector-list-container"></div><button class="btn" onclick="window.distributePlan()">✅ ENVIAR</button><button class="btn-outline" style="margin-top:10px;" onclick="window.closeModal('modal-assign-plan')">CANCELAR</button></div></div>
+    <div id="modal-assign-plan" class="modal"><div class="modal-content"><h3>ENVIAR A ATLETAS</h3><p id="assign-plan-title" style="color:var(--accent-color); margin-bottom:10px;">Selecciona atletas:</p><div id="assign-users-list" class="selector-list-container"></div><button class="btn" onclick="window.distributePlan()">✅ ENVIAR AHORA</button><button class="btn-outline" style="margin-top:10px;" onclick="window.closeModal('modal-assign-plan')">CANCELAR</button></div></div>
+
     <div id="modal-swap" class="modal"><div class="modal-content"><h3>CAMBIAR EJERCICIO</h3><div id="swap-list" style="max-height:300px; overflow-y:auto; text-align:left;"></div><button class="btn-outline" style="margin-top:15px;" onclick="window.closeModal('modal-swap')">CANCELAR</button></div></div>
     <div id="modal-details" class="modal"><div class="modal-content" style="text-align:left;"><h3 id="detail-title" style="color:var(--accent-color); text-align:center; margin-bottom:15px;">DETALLES</h3><div id="detail-content" style="font-size:0.85rem; max-height:60vh; overflow-y:auto;"></div><button class="btn-outline" style="margin-top:15px;" onclick="window.closeModal('modal-details')">CERRAR</button></div></div>
     <div id="modal-rpe" class="modal"><div class="modal-content"><h3>FINALIZAR</h3><div style="height: 250px; width: 100%; margin-bottom: 15px;"><canvas id="muscleRadarChart"></canvas></div><p style="color:#888; margin-bottom:20px;">¿Dificultad?</p><button class="rpe-btn rpe-easy" onclick="window.finishWorkout('Suave')">🟢 Suave / Moderado</button><button class="rpe-btn rpe-hard" onclick="window.finishWorkout('Duro')">🟠 Duro / Intenso</button><button class="rpe-btn rpe-max" onclick="window.finishWorkout('Fallo')">🔴 Fallo / Extremo</button><textarea id="workout-notes" rows="3" placeholder="📝 Notas..." style="width:100%; background:#222; border:1px solid #333; color:white; border-radius:8px; padding:10px; margin-top:10px; font-family:inherit;"></textarea><button class="btn-outline" onclick="window.closeModal('modal-rpe')">Cancelar</button></div></div>
@@ -356,13 +352,13 @@
     <div id="modal-diet" class="modal" style="z-index: 3500;"><div class="modal-content" style="width:100%; height:90%; max-width:800px; padding:0; background:white; overflow:hidden; display:flex; flex-direction:column;"><div style="background:#222; padding:10px; display:flex; justify-content:space-between; align-items:center;"><h3 style="margin:0; color:white;">🥗 PLAN NUTRICIONAL</h3><button onclick="window.closeDiet()" style="background:none; border:none; color:white; font-size:1.5rem; cursor:pointer;">✕</button></div><iframe id="diet-frame" style="width:100%; flex:1; border:none;"></iframe></div></div>
     <div id="modal-image-viewer" class="modal" style="z-index: 5000;"><div class="modal-content" style="background:black; padding:0; width:100%; height:100%; max-width:100%; border:none; display:flex; align-items:center; justify-content:center;"><img id="full-image-src" style="max-width:100%; max-height:100%; object-fit:contain;"><button class="btn-float" style="background:rgba(255,255,255,0.2); color:white; bottom:40px;" onclick="window.closeModal('modal-image-viewer')">✕</button></div></div>
 
-    <script type="module" src="js/app.js"></script>
     <script>
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(registrations) {
-            for(let registration of registrations) { registration.unregister().then(function() { console.log('♻️ Service Worker desregistrado correctamente.'); }); }
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('✅ SW Registrado:', reg.scope))
+                .catch(err => console.error('❌ Error SW:', err));
         });
-        caches.keys().then(function(names) { for (let name of names) caches.delete(name); });
     }
 </script>
 </body>

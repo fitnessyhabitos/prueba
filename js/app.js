@@ -2,9 +2,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
 import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, onSnapshot, query, where, addDoc, deleteDoc, getDocs, serverTimestamp, increment, orderBy, limit, arrayRemove, arrayUnion, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
-import { EXERCISES } from './data.js';
 
-console.log("⚡ FIT DATA: App v12.3 (Chart Destruction Fix)...");
+// --- OPTIMIZACIÓN 1: LAZY LOAD VARIABLES ---
+// Eliminado: import { EXERCISES } from './data.js'; 
+let EXERCISES = []; 
+let exercisesLoaded = false;
+
+console.log("⚡ FIT DATA PRO: App v13.0 (Red Optimized + Lazy Load)...");
 
 const firebaseConfig = {
   apiKey: "AIzaSyDW40Lg6QvBc3zaaA58konqsH3QtDrRmyM",
@@ -20,10 +24,16 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-enableIndexedDbPersistence(db).catch((err) => {
-    if (err.code == 'failed-precondition') { console.warn('Persistencia offline desactivada.'); }
-    else if (err.code == 'unimplemented') { console.warn('Navegador no soporta persistencia.'); }
-});
+// FIX: Persistencia defensiva
+try {
+    enableIndexedDbPersistence(db).catch((err) => {
+        if (err.code == 'failed-precondition') { console.warn('Persistencia offline desactivada (múltiples pestañas).'); }
+        else if (err.code == 'unimplemented') { console.warn('Navegador no soporta persistencia.'); }
+    });
+} catch(e) { console.debug("Persistencia no disponible o ya iniciada."); }
+
+// Color Base para Gráficos
+const THEME_COLOR = '#ff3333';
 
 const AVAILABLE_DIETS = [
     { name: "Dieta Volumen (3000kcal)", file: "volumen_3000.html" },
@@ -50,13 +60,13 @@ let deferredPrompt = null;
 
 // Cache & Edit Variables
 let rankFilterTime = 'all';        
-let rankFilterGender = 'all';     
-let rankFilterCat = 'kg';         
+let rankFilterGender = 'all';      
+let rankFilterCat = 'kg';          
 let adminUsersCache = null; 
 let editingHistoryId = null; 
 let currentHistoryDetails = null; 
 
-// Global instances (References kept but mainly managed by ID lookup now)
+// Global instances
 let chartInstance = null; let progressChart = null; let fatChartInstance = null; let bioChartInstance = null; let measureChartInstance = null; let coachFatChart = null; let coachBioChart = null; let coachMeasureChart = null; let radarChartInstance = null; let coachChart = null; let userRadarChart = null; let coachRadarChart = null;
 
 let selectedUserCoach = null; 
@@ -73,6 +83,21 @@ let selectedPlanForMassAssign = null;
 let selectedRoutineForMassAssign = null;
 let assignMode = 'plan'; 
 let noticeTargetUid = null; 
+
+// --- FUNCIÓN HELPER: CARGA DIFERIDA DE EJERCICIOS ---
+async function ensureExercisesLoaded() {
+    if (exercisesLoaded) return;
+    try {
+        console.log("📥 Descargando base de datos de ejercicios...");
+        const module = await import('./data.js'); // Importación dinámica
+        EXERCISES = module.EXERCISES;
+        exercisesLoaded = true;
+        console.log("✅ Ejercicios listos.");
+    } catch (e) {
+        console.error("Error cargando data.js", e);
+        alert("Error de conexión al cargar ejercicios.");
+    }
+}
 
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
@@ -148,8 +173,15 @@ onAuthStateChanged(auth, async (user) => {
                     document.getElementById('main-header').classList.remove('hidden');
                     loadRoutines();
                     const savedW = localStorage.getItem('fit_active_workout');
-                    if(savedW) { activeWorkout = JSON.parse(savedW); renderWorkout(); switchTab('workout-view'); startTimerMini(); } 
-                    else { switchTab('routines-view'); }
+                    if(savedW) { 
+                        // Esperar a que se carguen los ejercicios antes de restaurar
+                        ensureExercisesLoaded().then(() => {
+                            activeWorkout = JSON.parse(savedW); 
+                            renderWorkout(); 
+                            switchTab('workout-view'); 
+                            startTimerMini();
+                        });
+                    } else { switchTab('routines-view'); }
                 } else { alert("Cuenta en revisión."); signOut(auth); }
             }
         } catch(e) { console.log("Offline mode or error:", e); document.getElementById('loading-screen').classList.add('hidden'); }
@@ -221,15 +253,12 @@ window.switchCoachSubTab = (tabName) => {
     const content = document.getElementById(`ctab-content-${tabName}`); if(content) content.classList.remove('hidden');
 };
 
-// --- CHART HELPERS (FIXED DESTRUCTION) ---
 function renderFilteredChart(canvasId, instanceVar, dataHistory, typeKey, color, rangeDays = 9999) {
     const ctx = document.getElementById(canvasId); 
     if (!ctx) return null; 
-
-    // FIX: Destruir buscando en el canvas directamente para evitar errores de referencia
     const existingChart = Chart.getChart(canvasId);
     if (existingChart) existingChart.destroy();
-    if (instanceVar) instanceVar.destroy(); // Seguridad extra
+    if (instanceVar) instanceVar.destroy(); 
 
     const now = Date.now(); 
     const cutoff = now - (rangeDays * 24 * 60 * 60 * 1000);
@@ -238,7 +267,9 @@ function renderFilteredChart(canvasId, instanceVar, dataHistory, typeKey, color,
     const labels = filtered.map(d => new Date(d.date.seconds * 1000).toLocaleDateString('es-ES', {day:'2-digit', month:'short'}));
     const values = filtered.map(d => d[typeKey] || 0);
 
-    return new Chart(ctx, { type: 'line', data: { labels: labels, datasets: [{ label: typeKey.toUpperCase(), data: values, borderColor: color, backgroundColor: color + '20', tension: 0.3, fill: true, pointRadius: 4, pointBackgroundColor: '#000', pointBorderColor: color }] }, options: { maintainAspectRatio: false, layout: { padding: { top: 10, bottom: 5, left: 5, right: 10 } }, plugins: { legend: { display: false } }, scales: { x: { display: true, ticks: { color: '#666', maxRotation: 45, minRotation: 0, font: {size: 10} }, grid: { display: false } }, y: { grid: { color: '#333' }, ticks: { color: '#888' } } } } });
+    const chartColor = color === '#00ff88' ? '#00ff88' : THEME_COLOR;
+
+    return new Chart(ctx, { type: 'line', data: { labels: labels, datasets: [{ label: typeKey.toUpperCase(), data: values, borderColor: chartColor, backgroundColor: chartColor + '20', tension: 0.3, fill: true, pointRadius: 4, pointBackgroundColor: '#000', pointBorderColor: chartColor }] }, options: { maintainAspectRatio: false, layout: { padding: { top: 10, bottom: 5, left: 5, right: 10 } }, plugins: { legend: { display: false } }, scales: { x: { display: true, ticks: { color: '#666', maxRotation: 45, minRotation: 0, font: {size: 10} }, grid: { display: false } }, y: { grid: { color: '#333' }, ticks: { color: '#888' } } } } });
 }
 
 function injectChartFilter(canvasId, callbackName) {
@@ -251,8 +282,6 @@ window.updateMeasureChart = (id, range) => { const sourceData = (id === 'coachMe
 
 function renderFilteredMeasureChart(canvasId, instanceVar, dataHistory, rangeDays) {
     const ctx = document.getElementById(canvasId); if (!ctx) return null;
-    
-    // FIX: Destrucción segura
     const existingChart = Chart.getChart(canvasId);
     if (existingChart) existingChart.destroy();
     
@@ -291,7 +320,7 @@ window.loadProfile = async () => {
     document.getElementById('stat-sets').innerText = userData.stats?.totalSets || 0;
     document.getElementById('stat-reps').innerText = userData.stats?.totalReps || 0;
     
-    if(userData.weightHistory) { fixChartContainer('weightChart'); injectChartFilter('weightChart', 'window.updateWeightChart'); chartInstance = renderFilteredChart('weightChart', chartInstance, userData.weightHistory, 'weight', '#ff3333', 9999); }
+    if(userData.weightHistory) { fixChartContainer('weightChart'); injectChartFilter('weightChart', 'window.updateWeightChart'); chartInstance = renderFilteredChart('weightChart', chartInstance, userData.weightHistory, 'weight', THEME_COLOR, 9999); }
 
     const histDiv = document.getElementById('user-history-list'); histDiv.innerHTML = "Cargando...";
     try {
@@ -316,7 +345,7 @@ window.loadProfile = async () => {
     renderMuscleRadar('userMuscleChart', userData.muscleStats || {});
 };
 
-window.updateWeightChart = (id, range) => { const sourceData = (id === 'coachWeightChart') ? selectedUserObj.weightHistory : userData.weightHistory; const instance = (id === 'coachWeightChart') ? coachChart : chartInstance; const newInst = renderFilteredChart(id, instance, sourceData, 'weight', '#ff3333', parseInt(range)); if(id === 'coachWeightChart') coachChart = newInst; else chartInstance = newInst; };
+window.updateWeightChart = (id, range) => { const sourceData = (id === 'coachWeightChart') ? selectedUserObj.weightHistory : userData.weightHistory; const instance = (id === 'coachWeightChart') ? coachChart : chartInstance; const newInst = renderFilteredChart(id, instance, sourceData, 'weight', THEME_COLOR, parseInt(range)); if(id === 'coachWeightChart') coachChart = newInst; else chartInstance = newInst; };
 window.updateBioChart = (id, range) => { const sourceData = (id === 'coachBioChart') ? selectedUserObj.bioHistory : userData.bioHistory; const instance = (id === 'coachBioChart') ? coachBioChart : bioChartInstance; const newInst = renderFilteredChart(id, instance, sourceData, 'muscle', '#00ffff', parseInt(range)); if(id === 'coachBioChart') coachBioChart = newInst; else bioChartInstance = newInst; };
 window.updateFatChart = (id, range) => { const sourceData = (id === 'coachFatChart') ? selectedUserObj.skinfoldHistory : userData.skinfoldHistory; const instance = (id === 'coachFatChart') ? coachFatChart : fatChartInstance; const newInst = renderFilteredChart(id, instance, sourceData, 'fat', '#ffaa00', parseInt(range)); if(id === 'coachFatChart') coachFatChart = newInst; else fatChartInstance = newInst; };
 
@@ -373,13 +402,37 @@ async function loadRoutines() {
     });
 }
 
-window.openEditor = async (id = null) => { editingRoutineId = id; document.getElementById('editor-name').value = ''; document.getElementById('editor-title').innerText = id ? "EDITAR RUTINA" : "NUEVA RUTINA"; if (id) { const docSnap = await getDoc(doc(db, "routines", id)); const r = docSnap.data(); document.getElementById('editor-name').value = r.name; currentRoutineSelections = r.exercises.map(ex => ({ n: ex.n || ex, s: ex.s || false, series: ex.series || 5, reps: ex.reps || "20-16-16-16-16" })); } else { currentRoutineSelections = []; } window.currentRoutineSelections = currentRoutineSelections; renderExercises(EXERCISES); renderSelectedSummary(); switchTab('editor-view'); };
+window.openEditor = async (id = null) => { 
+    await ensureExercisesLoaded(); // Lazy load wait
+    editingRoutineId = id; 
+    document.getElementById('editor-name').value = ''; 
+    document.getElementById('editor-title').innerText = id ? "EDITAR RUTINA" : "NUEVA RUTINA"; 
+    if (id) { 
+        const docSnap = await getDoc(doc(db, "routines", id)); 
+        const r = docSnap.data(); 
+        document.getElementById('editor-name').value = r.name; 
+        currentRoutineSelections = r.exercises.map(ex => ({ n: ex.n || ex, s: ex.s || false, series: ex.series || 5, reps: ex.reps || "20-16-16-16-16" })); 
+    } else { currentRoutineSelections = []; } 
+    window.currentRoutineSelections = currentRoutineSelections; 
+    renderExercises(EXERCISES); 
+    renderSelectedSummary(); 
+    switchTab('editor-view'); 
+};
+
 window.filterExercises = (t) => { const cleanSearch = normalizeText(t); const filtered = EXERCISES.filter(e => { const nameMatch = normalizeText(e.n).includes(cleanSearch); const muscleMatch = e.m ? normalizeText(e.m).includes(cleanSearch) : false; return nameMatch || muscleMatch; }); renderExercises(filtered); };
 
+// --- OPTIMIZACIÓN 3: RENDER LIMIT ---
 function renderExercises(l) {
     const c = document.getElementById('exercise-selector-list'); c.innerHTML = '';
     const sortedList = [...l].sort((a, b) => { const aSelected = currentRoutineSelections.some(x => x.n === a.n); const bSelected = currentRoutineSelections.some(x => x.n === b.n); if (aSelected && !bSelected) return -1; if (!aSelected && bSelected) return 1; return 0; });
-    sortedList.forEach(e => {
+    
+    // Si buscamos, mostramos todo. Si no, solo los primeros 50 para velocidad.
+    const searchTerm = document.getElementById('ex-search').value;
+    const isSearching = searchTerm && searchTerm.length > 0;
+    const limit = isSearching ? sortedList.length : 50; 
+    const listToRender = sortedList.slice(0, limit);
+
+    listToRender.forEach(e => {
         const d = document.createElement('div'); const selectedIndex = currentRoutineSelections.findIndex(x => x.n === e.n); const isSelected = selectedIndex > -1; const obj = isSelected ? currentRoutineSelections[selectedIndex] : null; d.id = `ex-card-${normalizeText(e.n)}`; d.className = 'ex-select-item';
         if (isSelected) {
             d.classList.add('selected-red-active'); d.style.cssText = "background: rgba(50, 10, 10, 0.95); border-left: 4px solid var(--accent-color); border: 1px solid var(--accent-color); padding: 10px; margin-bottom: 5px; border-radius: 8px; flex-direction:column; align-items: stretch;";
@@ -392,6 +445,13 @@ function renderExercises(l) {
         }
         c.appendChild(d);
     });
+
+    if (!isSearching && sortedList.length > 50) {
+        const moreDiv = document.createElement('div');
+        moreDiv.style.padding = "15px"; moreDiv.style.textAlign = "center"; moreDiv.style.color = "#666"; moreDiv.style.fontSize = "0.8rem";
+        moreDiv.innerHTML = `... y ${sortedList.length - 50} ejercicios más.<br><b>Usa el buscador 🔍 para encontrar específicos.</b>`;
+        c.appendChild(moreDiv);
+    }
 }
 
 window.renderSelectedSummary = () => {
@@ -448,10 +508,11 @@ function renderMeasureChart(canvasId, historyData) {
     if(canvasId === 'chartMeasures') measureChartInstance = newChart; else coachMeasureChart = newChart;
 }
 
+// FIX: Radar con color ROJO NEON (#ff3333)
 function renderMuscleRadar(canvasId, stats) {
     const ctx = document.getElementById(canvasId); if(!ctx) return; const existingChart = Chart.getChart(ctx); if (existingChart) existingChart.destroy();
     const muscleGroups = ["Pecho", "Espalda", "Cuádriceps", "Isquios", "Hombros", "Bíceps", "Tríceps", "Glúteos"]; const dataValues = muscleGroups.map(m => stats[m] || 0); const maxValue = Math.max(...dataValues); let calculatedStep = Math.ceil(maxValue / 5); if (calculatedStep < 1) calculatedStep = 1; const niceMax = Math.ceil(maxValue / calculatedStep) * calculatedStep;
-    new Chart(ctx, { type: 'radar', data: { labels: muscleGroups, datasets: [{ label: 'Series', data: dataValues, backgroundColor: 'rgba(255, 51, 51, 0.25)', borderColor: '#ff3333', borderWidth: 2, pointBackgroundColor: '#ff3333', pointBorderColor: '#fff', pointRadius: 3, pointHoverRadius: 5 }] }, options: { scales: { r: { angleLines: { color: 'rgba(255, 255, 255, 0.1)' }, grid: { color: 'rgba(255, 255, 255, 0.1)', circular: false }, pointLabels: { color: '#cccccc', font: { size: 10 } }, ticks: { display: false, stepSize: calculatedStep, maxTicksLimit: 6 }, suggestedMin: 0, max: niceMax > 0 ? niceMax : 5 } }, plugins: { legend: { display: false } }, maintainAspectRatio: false } });
+    new Chart(ctx, { type: 'radar', data: { labels: muscleGroups, datasets: [{ label: 'Series', data: dataValues, backgroundColor: 'rgba(255, 51, 51, 0.25)', borderColor: THEME_COLOR, borderWidth: 2, pointBackgroundColor: THEME_COLOR, pointBorderColor: '#fff', pointRadius: 3, pointHoverRadius: 5 }] }, options: { scales: { r: { angleLines: { color: 'rgba(255, 255, 255, 0.1)' }, grid: { color: 'rgba(255, 255, 255, 0.1)', circular: false }, pointLabels: { color: '#cccccc', font: { size: 10 } }, ticks: { display: false, stepSize: calculatedStep, maxTicksLimit: 6 }, suggestedMin: 0, max: niceMax > 0 ? niceMax : 5 } }, plugins: { legend: { display: false } }, maintainAspectRatio: false } });
 }
 
 window.openDietView = () => { if(!userData.dietFile) return; const url = `nutricion/${userData.dietFile}`; document.getElementById('diet-frame').src = url; window.openModal('modal-diet'); };
@@ -479,6 +540,7 @@ window.cancelWorkout = () => { if(confirm("⚠ ¿SEGURO QUE QUIERES CANCELAR?\nS
 window.startWorkout = async (rid) => {
     if(document.getElementById('cfg-wake').checked && 'wakeLock' in navigator) { try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e) { console.log("WakeLock error", e); } }
     try {
+        await ensureExercisesLoaded(); // Lazy load wait
         const snap = await getDoc(doc(db,"routines",rid)); const r = snap.data();
         let lastWorkoutData = null; const q = query(collection(db, "workouts"), where("uid", "==", currentUser.uid)); const wSnap = await getDocs(q); const sameRoutine = wSnap.docs.map(d=>d.data()).filter(d => d.routine === r.name).sort((a,b) => b.date - a.date); if(sameRoutine.length > 0) lastWorkoutData = sameRoutine[0].details;
         const now = Date.now(); initAudioEngine();
@@ -501,32 +563,152 @@ window.changeRankFilter = (type, val) => {
     window.loadRankingView();
 };
 
+// --- OPTIMIZACIÓN 2: CACHÉ DIARIO (RESET 00:00) ---
 window.loadRankingView = async () => {
-    switchTab('ranking-view'); const list = document.getElementById('ranking-list'); list.innerHTML = '<div style="text-align:center; margin-top:50px; color:#666;">⏳ Calculando posiciones...</div>';
+    switchTab('ranking-view'); 
+    const list = document.getElementById('ranking-list'); 
+    list.innerHTML = '<div style="text-align:center; margin-top:50px; color:#666;">⏳ Verificando datos...</div>';
+
     try {
-        let orderByField = "", collectionField = "";
-        if (rankFilterCat === 'kg') collectionField = "kg"; else if (rankFilterCat === 'workouts') collectionField = "workouts"; else if (rankFilterCat === 'reps') collectionField = "reps"; else if (rankFilterCat === 'sets') collectionField = "sets"; else if (rankFilterCat === 'prs') collectionField = "prCount";
-        if (rankFilterTime === 'all') { if (rankFilterCat === 'kg') orderByField = "stats.totalKg"; else if (rankFilterCat === 'workouts') orderByField = "stats.workouts"; else if (rankFilterCat === 'reps') orderByField = "stats.totalReps"; else if (rankFilterCat === 'sets') orderByField = "stats.totalSets"; else if (rankFilterCat === 'prs') orderByField = "stats.prCount"; } 
-        else { const now = new Date(); let timeKey = ""; if(rankFilterTime === 'week') timeKey = `week_${getWeekNumber(now)}`; if(rankFilterTime === 'month') timeKey = `month_${now.getFullYear()}_${now.getMonth()}`; if(rankFilterTime === 'year') timeKey = `year_${now.getFullYear()}`; if (rankFilterCat === 'prs') { list.innerHTML = "<div class='tip-box'>🏆 Los Récords solo se contabilizan en el Ranking Histórico.</div>"; return; } orderByField = `stats_${timeKey}.${collectionField}`; }
-        let q = query(collection(db, "users"), where("rankingOptIn", "==", true), orderBy(orderByField, "desc"), limit(50));
-        if (rankFilterGender !== 'all') { q = query(collection(db, "users"), where("rankingOptIn", "==", true), where("gender", "==", rankFilterGender), orderBy(orderByField, "desc"), limit(50)); }
-        const snap = await getDocs(q); list.innerHTML = "";
-        if(snap.empty) { list.innerHTML = "<div class='tip-box'>No hay datos para este periodo/filtro todavía.</div>"; return; }
+        const cacheKey = `rank_cache_${rankFilterTime}_${rankFilterGender}_${rankFilterCat}`;
+        const todayStr = new Date().toDateString();
+        const cachedRaw = localStorage.getItem(cacheKey);
+        
+        let useCache = false;
+        let rankingData = [];
+
+        if (cachedRaw) {
+            const cachedObj = JSON.parse(cachedRaw);
+            if (cachedObj.date === todayStr) {
+                console.log("⚡ USANDO CACHÉ LOCAL (0 Lecturas Firebase)");
+                rankingData = cachedObj.data;
+                useCache = true;
+            }
+        }
+
+        if (!useCache) {
+            console.log("☁️ DESCARGANDO NUEVO RANKING (Coste Firebase)");
+            list.innerHTML = '<div style="text-align:center; margin-top:50px; color:var(--accent-color);">↻ Actualizando tabla diaria...</div>';
+            
+            let orderByField = "", collectionField = "";
+            if (rankFilterCat === 'kg') collectionField = "kg"; 
+            else if (rankFilterCat === 'workouts') collectionField = "workouts"; 
+            else if (rankFilterCat === 'reps') collectionField = "reps"; 
+            else if (rankFilterCat === 'sets') collectionField = "sets"; 
+            else if (rankFilterCat === 'prs') collectionField = "prCount";
+
+            if (rankFilterTime === 'all') { 
+                if (rankFilterCat === 'kg') orderByField = "stats.totalKg"; 
+                else if (rankFilterCat === 'workouts') orderByField = "stats.workouts"; 
+                else if (rankFilterCat === 'reps') orderByField = "stats.totalReps"; 
+                else if (rankFilterCat === 'sets') orderByField = "stats.totalSets"; 
+                else if (rankFilterCat === 'prs') orderByField = "stats.prCount"; 
+            } else { 
+                const now = new Date(); 
+                let timeKey = ""; 
+                if(rankFilterTime === 'week') timeKey = `week_${getWeekNumber(now)}`; 
+                if(rankFilterTime === 'month') timeKey = `month_${now.getFullYear()}_${now.getMonth()}`; 
+                if(rankFilterTime === 'year') timeKey = `year_${now.getFullYear()}`; 
+                if (rankFilterCat === 'prs') { list.innerHTML = "<div class='tip-box'>🏆 Los Récords solo se contabilizan en el Ranking Histórico.</div>"; return; } 
+                orderByField = `stats_${timeKey}.${collectionField}`; 
+            }
+
+            let q = query(collection(db, "users"), where("rankingOptIn", "==", true), orderBy(orderByField, "desc"), limit(50));
+            if (rankFilterGender !== 'all') { 
+                q = query(collection(db, "users"), where("rankingOptIn", "==", true), where("gender", "==", rankFilterGender), orderBy(orderByField, "desc"), limit(50)); 
+            }
+
+            const snap = await getDocs(q);
+            if(snap.empty) { 
+                list.innerHTML = "<div class='tip-box'>No hay datos para este periodo/filtro todavía.</div>"; 
+                return; 
+            }
+
+            rankingData = [];
+            snap.forEach(d => {
+                const u = d.data();
+                let rawValue = 0;
+                if (rankFilterTime === 'all') { 
+                    const fieldName = orderByField.split('.')[1]; 
+                    rawValue = u.stats ? u.stats[fieldName] : 0; 
+                } else { 
+                    const rootKey = orderByField.split('.')[0]; 
+                    const subKey = orderByField.split('.')[1]; 
+                    rawValue = (u[rootKey] && u[rootKey][subKey]) ? u[rootKey][subKey] : 0; 
+                }
+                
+                rankingData.push({
+                    id: d.id,
+                    name: u.name,
+                    photo: u.photo,
+                    workouts: u.stats?.workouts || 0,
+                    value: rawValue
+                });
+            });
+
+            try {
+                const cacheObject = { date: todayStr, data: rankingData };
+                localStorage.setItem(cacheKey, JSON.stringify(cacheObject));
+            } catch (err) { console.warn("Memoria llena, no se pudo cachear"); }
+        }
+
+        list.innerHTML = "";
         let rank = 1;
-        snap.forEach(d => {
-            const u = d.data(); const isMe = d.id === currentUser.uid;
-            let rawValue = 0; if (rankFilterTime === 'all') { const fieldName = orderByField.split('.')[1]; rawValue = u.stats ? u.stats[fieldName] : 0; } else { const rootKey = orderByField.split('.')[0]; const subKey = orderByField.split('.')[1]; rawValue = (u[rootKey] && u[rootKey][subKey]) ? u[rootKey][subKey] : 0; }
-            let displayValue = rawValue; if(rankFilterCat === 'kg') displayValue = (rawValue / 1000).toFixed(1) + 't'; else if(rankFilterCat === 'prs') displayValue = rawValue + ' 🏆'; else displayValue = rawValue.toLocaleString();
-            let posClass = ""; if(rank === 1) posClass = "ranking-1"; if(rank === 2) posClass = "ranking-2"; if(rank === 3) posClass = "ranking-3";
-            const avatarHtml = u.photo ? `<img src="${u.photo}" class="mini-avatar" style="width:35px;height:35px;">` : `<div class="mini-avatar-placeholder" style="width:35px;height:35px;font-size:0.8rem;">${u.name.charAt(0).toUpperCase()}</div>`;
-            const div = document.createElement('div'); div.className = "ranking-row"; if(isMe) div.style.borderColor = "var(--accent-color)";
-            div.innerHTML = `<div class="ranking-pos ${posClass}">#${rank}</div><div style="margin-right:10px;">${avatarHtml}</div><div style="flex:1;"><div style="font-weight:bold; color:${isMe ? 'var(--accent-color)' : 'white'}">${u.name}</div><div style="font-size:0.65rem; color:#666;">${u.stats?.workouts || 0} entrenos totales</div></div><div class="rank-value-highlight">${displayValue}</div>`;
-            list.appendChild(div); rank++;
+        
+        rankingData.forEach(u => {
+            const isMe = u.id === currentUser.uid;
+            let displayValue = u.value; 
+            if(rankFilterCat === 'kg') displayValue = (u.value / 1000).toFixed(1) + 't'; 
+            else if(rankFilterCat === 'prs') displayValue = u.value + ' 🏆'; 
+            else displayValue = u.value.toLocaleString();
+
+            let posClass = ""; 
+            if(rank === 1) posClass = "ranking-1"; 
+            if(rank === 2) posClass = "ranking-2"; 
+            if(rank === 3) posClass = "ranking-3";
+
+            const avatarHtml = u.photo 
+                ? `<img src="${u.photo}" class="mini-avatar" style="width:35px;height:35px;">` 
+                : `<div class="mini-avatar-placeholder" style="width:35px;height:35px;font-size:0.8rem;">${u.name.charAt(0).toUpperCase()}</div>`;
+
+            const div = document.createElement('div'); 
+            div.className = "ranking-row"; 
+            if(isMe) div.style.borderColor = "var(--accent-color)";
+
+            div.innerHTML = `
+                <div class="ranking-pos ${posClass}">#${rank}</div>
+                <div style="margin-right:10px;">${avatarHtml}</div>
+                <div style="flex:1;">
+                    <div style="font-weight:bold; color:${isMe ? 'var(--accent-color)' : 'white'}">${u.name}</div>
+                    <div style="font-size:0.65rem; color:#666;">${u.workouts} entrenos</div>
+                </div>
+                <div class="rank-value-highlight">${displayValue}</div>
+            `;
+            list.appendChild(div); 
+            rank++;
         });
-    } catch(e) { console.error("Rank Error:", e); list.innerHTML = `<div style="text-align:center; color:#666;">Error cargando datos.<br><small>${e.message}</small></div>`; }
+
+        if(useCache) {
+            const advice = document.createElement('div');
+            advice.className = 'tip-box';
+            advice.style.fontSize = '0.6rem';
+            advice.style.marginTop = '10px';
+            advice.style.opacity = '0.7';
+            advice.innerHTML = "📊 Datos actualizados de hoy. El ranking se recalculará mañana.";
+            list.appendChild(advice);
+        }
+
+    } catch(e) { 
+        console.error("Rank Error:", e); 
+        list.innerHTML = `<div style="text-align:center; color:#666;">Error.<br><small>${e.message}</small></div>`; 
+    }
 };
 
-window.initSwap = (idx) => { swapTargetIndex = idx; const currentEx = activeWorkout.exs[idx]; const muscle = currentEx.mInfo.main; const list = document.getElementById('swap-list'); list.innerHTML = ''; const alternatives = EXERCISES.filter(e => getMuscleInfoByGroup(e.m).main === muscle && e.n !== currentEx.n); if(alternatives.length === 0) list.innerHTML = '<div style="padding:10px;">No hay alternativas directas.</div>'; else alternatives.forEach(alt => { const d = document.createElement('div'); d.style.padding = "10px"; d.style.borderBottom = "1px solid #333"; d.style.cursor = "pointer"; d.innerHTML = `<b>${alt.n}</b>`; d.onclick = () => window.performSwap(alt.n); list.appendChild(d); }); window.openModal('modal-swap'); };
+window.initSwap = (idx) => { 
+    ensureExercisesLoaded().then(() => {
+        swapTargetIndex = idx; const currentEx = activeWorkout.exs[idx]; const muscle = currentEx.mInfo.main; const list = document.getElementById('swap-list'); list.innerHTML = ''; const alternatives = EXERCISES.filter(e => getMuscleInfoByGroup(e.m).main === muscle && e.n !== currentEx.n); if(alternatives.length === 0) list.innerHTML = '<div style="padding:10px;">No hay alternativas directas.</div>'; else alternatives.forEach(alt => { const d = document.createElement('div'); d.style.padding = "10px"; d.style.borderBottom = "1px solid #333"; d.style.cursor = "pointer"; d.innerHTML = `<b>${alt.n}</b>`; d.onclick = () => window.performSwap(alt.n); list.appendChild(d); }); window.openModal('modal-swap');
+    });
+};
 window.performSwap = (newName) => { if(swapTargetIndex === null) return; const data = getExerciseData(newName); const currentSets = activeWorkout.exs[swapTargetIndex].sets.map(s => ({...s, prev:'-', d: false})); activeWorkout.exs[swapTargetIndex].n = newName; activeWorkout.exs[swapTargetIndex].img = data.img; activeWorkout.exs[swapTargetIndex].video = data.v; activeWorkout.exs[swapTargetIndex].sets = currentSets; saveLocalWorkout(); renderWorkout(); window.closeModal('modal-swap'); };
 
 // --- RENDER WORKOUT (Clean Dropsets + Delete Btn) ---
@@ -607,7 +789,7 @@ window.tS = async (i, j) => {
         if (weight > 0 && reps > 0) {
             const estimated1RM = Math.round(weight / (1.0278 - (0.0278 * reps)));
             if (!userData.rmRecords) userData.rmRecords = {}; const currentRecord = userData.rmRecords[exerciseName] || 0;
-            if (estimated1RM > currentRecord) { userData.rmRecords[exerciseName] = estimated1RM; updateDoc(doc(db, "users", currentUser.uid), { [`rmRecords.${exerciseName}`]: estimated1RM }); if(typeof confetti === 'function') { confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#00ff88', '#ffffff'] }); setTimeout(() => confetti({ particleCount: 50, angle: 60, spread: 55, origin: { x: 0 } }), 200); setTimeout(() => confetti({ particleCount: 50, angle: 120, spread: 55, origin: { x: 1 } }), 200); } showToast(`🔥 ¡NUEVO NIVEL DE FUERZA!<br>1RM Est: <b>${estimated1RM}kg</b> en ${exerciseName}`) ; } 
+            if (estimated1RM > currentRecord) { userData.rmRecords[exerciseName] = estimated1RM; updateDoc(doc(db, "users", currentUser.uid), { [`rmRecords.${exerciseName}`]: estimated1RM }); if(typeof confetti === 'function') { confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: [THEME_COLOR, '#ffffff'] }); setTimeout(() => confetti({ particleCount: 50, angle: 60, spread: 55, origin: { x: 0 } }), 200); setTimeout(() => confetti({ particleCount: 50, angle: 120, spread: 55, origin: { x: 1 } }), 200); } showToast(`🔥 ¡NUEVO NIVEL DE FUERZA!<br>1RM Est: <b>${estimated1RM}kg</b> en ${exerciseName}`) ; } 
             else { const currentWeightPR = userData.prs ? (userData.prs[exerciseName] || 0) : 0; if (weight > currentWeightPR) { if(!userData.prs) userData.prs = {}; userData.prs[exerciseName] = weight; const newPrCount = (userData.stats.prCount || 0) + 1; updateDoc(doc(db, "users", currentUser.uid), { [`prs.${exerciseName}`]: weight, "stats.prCount": newPrCount }); userData.stats.prCount = newPrCount; showToast(`💪 Peso Máximo Superado: ${weight}kg`); } }
         }
         openRest(); 
@@ -643,7 +825,7 @@ window.promptRPE = () => {
     const radarCtx = document.getElementById('muscleRadarChart'); if (!radarCtx) return; if (radarChartInstance) radarChartInstance.destroy();
     const muscleCounts = { "Pecho":0, "Espalda":0, "Pierna":0, "Hombros":0, "Brazos":0, "Abs":0 };
     if (activeWorkout && activeWorkout.exs) { activeWorkout.exs.forEach(e => { const m = e.mInfo?.main || "General"; let key = ""; if (["Pecho", "Espalda", "Hombros", "Abs"].includes(m)) key = m; else if (["Cuádriceps", "Isquios", "Glúteos", "Gemelos"].includes(m)) key = "Pierna"; else if (["Bíceps", "Tríceps"].includes(m)) key = "Brazos"; if (key && muscleCounts.hasOwnProperty(key)) { const completedSets = e.sets?.filter(s => s.d).length || 0; muscleCounts[key] += completedSets; } }); }
-    radarChartInstance = new Chart(radarCtx, { type: 'radar', data: { labels: Object.keys(muscleCounts), datasets: [{ label: 'Series Finalizadas', data: Object.values(muscleCounts), backgroundColor: 'rgba(255, 51, 51, 0.4)', borderColor: '#ff3333', borderWidth: 2, pointBackgroundColor: '#ff3333' }] }, options: { scales: { r: { beginAtZero: true, min: 0, ticks: { display: false, stepSize: 1 }, grid: { color: '#333' }, angleLines: { color: '#333' }, pointLabels: { color: '#ffffff', font: { size: 10 } } } }, plugins: { legend: { display: false } }, maintainAspectRatio: false, responsive: true } });
+    radarChartInstance = new Chart(radarCtx, { type: 'radar', data: { labels: Object.keys(muscleCounts), datasets: [{ label: 'Series Finalizadas', data: Object.values(muscleCounts), backgroundColor: 'rgba(255, 51, 51, 0.4)', borderColor: THEME_COLOR, borderWidth: 2, pointBackgroundColor: THEME_COLOR, pointBorderColor: '#fff', pointRadius: 3, pointHoverRadius: 5 }] }, options: { scales: { r: { beginAtZero: true, min: 0, ticks: { display: false, stepSize: 1 }, grid: { color: '#333' }, angleLines: { color: '#333' }, pointLabels: { color: '#ffffff', font: { size: 10 } } } }, plugins: { legend: { display: false } }, maintainAspectRatio: false, responsive: true } });
     const notesEl = document.getElementById('workout-notes'); if (notesEl) notesEl.value = ''; window.openModal('modal-rpe');
 };
 
@@ -829,7 +1011,7 @@ window.renderProgressChart = (exName) => {
     rawPoints.sort((a,b) => a.date - b.date);
     const labels = rawPoints.map(p => new Date(p.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }));
     const volData = rawPoints.map(p => p.vol); const rmData = rawPoints.map(p => Math.round(p.rm)); const prData = rawPoints.map(p => p.maxW);
-    progressChart = new Chart(ctx, { type: 'line', data: { labels: labels, datasets: [ { label: 'Volumen (Kg)', data: volData, borderColor: '#00ff88', backgroundColor: 'rgba(0, 255, 136, 0.1)', yAxisID: 'y', tension: 0.4, fill: true, pointRadius: 3 }, { label: '1RM Est.', data: rmData, borderColor: '#ffaa00', yAxisID: 'y1', tension: 0.3, pointRadius: 4 }, { label: 'Peso Máx', data: prData, borderColor: '#ff3333', borderDash: [5, 5], yAxisID: 'y1', tension: 0.3, pointRadius: 2 } ] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { type: 'linear', display: true, position: 'left', grid: { color: '#333' } }, y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false } }, x: { ticks: { color: '#888', maxRotation: 45, minRotation: 0 } } } } }); 
+    progressChart = new Chart(ctx, { type: 'line', data: { labels: labels, datasets: [ { label: 'Volumen (Kg)', data: volData, borderColor: THEME_COLOR, backgroundColor: THEME_COLOR + '20', yAxisID: 'y', tension: 0.4, fill: true, pointRadius: 3 }, { label: '1RM Est.', data: rmData, borderColor: '#ffaa00', yAxisID: 'y1', tension: 0.3, pointRadius: 4 }, { label: 'Peso Máx', data: prData, borderColor: '#fff', borderDash: [5, 5], yAxisID: 'y1', tension: 0.3, pointRadius: 2 } ] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { type: 'linear', display: true, position: 'left', grid: { color: '#333' } }, y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false } }, x: { ticks: { color: '#888', maxRotation: 45, minRotation: 0 } } } } }); 
 };
 
 // --- ADMIN / COACH LOGIC ---
@@ -951,13 +1133,49 @@ window.viewRoutineFullDetails = async (rid) => {
     } catch(e) { console.error(e); alert("Error cargando detalles"); }
 };
 
+// FIX: Función completamente reparada para mostrar tarjetas clickeables y selección visual
 window.initMassAssignRoutine = async (rid) => {
-    assignMode = 'routine'; selectedRoutineForMassAssign = rid; const list = document.getElementById('assign-users-list'); window.openModal('modal-assign-plan');
+    assignMode = 'routine'; 
+    selectedRoutineForMassAssign = rid; 
+    const list = document.getElementById('assign-users-list'); 
+    window.openModal('modal-assign-plan');
+    
     try {
-        const snap = await getDoc(doc(db, "routines", rid)); if (snap.exists()) document.getElementById('assign-plan-title').innerText = `Enviar "${snap.data().name}" a:`;
+        const snap = await getDoc(doc(db, "routines", rid)); 
+        if (snap.exists()) document.getElementById('assign-plan-title').innerText = `Enviar "${snap.data().name}" a:`;
+        
         let q = userData.role === 'assistant' ? query(collection(db, "users"), where("assignedCoach", "==", currentUser.uid)) : collection(db, "users");
-        const uSnap = await getDocs(q); list.innerHTML = '';
-        uSnap.forEach(d => { const u = d.data(); if (u.role === 'athlete') { const div = document.createElement('div'); div.className = "selector-item"; div.innerHTML = `<input type="checkbox" class="user-mass-check selector-checkbox" value="${d.id}" id="u-${d.id}"><label for="u-${d.id}" class="selector-label">${u.name}</label>`; list.appendChild(div); } });
+        const uSnap = await getDocs(q); 
+        list.innerHTML = '';
+        
+        uSnap.forEach(d => { 
+            const u = d.data(); 
+            if (u.role === 'athlete') { 
+                const div = document.createElement('div'); 
+                div.className = "selector-item user-select-card";
+                // Lógica de click visual para evitar problemas táctiles
+                div.onclick = (e) => {
+                    // Si no se hizo click directamente en el input, cambiamos el input manualmente
+                    if (e.target.type !== 'checkbox') {
+                        const cb = div.querySelector('input');
+                        cb.checked = !cb.checked;
+                    }
+                    // Aplicar estilos visuales (Card Roja)
+                    if (div.querySelector('input').checked) {
+                         div.style.backgroundColor = 'rgba(255, 51, 51, 0.2)';
+                         div.style.border = '1px solid var(--accent-color)';
+                         div.classList.add('active-selection');
+                    } else {
+                         div.style.backgroundColor = 'transparent';
+                         div.style.border = '1px solid #333';
+                         div.classList.remove('active-selection');
+                    }
+                };
+
+                div.innerHTML = `<input type="checkbox" class="user-mass-check selector-checkbox" value="${d.id}" id="u-${d.id}" style="pointer-events:none;"><label class="selector-label" style="pointer-events:none;">${u.name}</label>`; 
+                list.appendChild(div); 
+            } 
+        });
     } catch(e) { console.error(e); }
 };
 
@@ -977,14 +1195,56 @@ window.loadAdminPlans = async () => {
 window.viewPlanContent = async (planName, planId) => { const snap = await getDoc(doc(db, "plans", planId)); if(!snap.exists()) return; const p = snap.data(); let html = `<ul style="padding-left:20px; margin-top:10px;">`; if(allRoutinesCache.length === 0) { const rSnap = await getDocs(collection(db, "routines")); rSnap.forEach(r => allRoutinesCache.push({id:r.id, ...r.data()})); } p.routines.forEach(rid => { const rObj = allRoutinesCache.find(x => x.id === rid); html += `<li style="margin-bottom:5px; color:#ddd;">${rObj ? rObj.name : "Rutina no encontrada"}</li>`; }); html += `</ul>`; document.getElementById('detail-title').innerText = planName; document.getElementById('detail-content').innerHTML = html; window.openModal('modal-details'); };
 window.createPlan = async () => { const name = document.getElementById('new-plan-name').value; const checks = document.querySelectorAll('.plan-check:checked'); if(!name || checks.length === 0) return alert("Pon un nombre y selecciona rutinas"); await addDoc(collection(db, "plans"), { name: name, routines: Array.from(checks).map(c => c.value), createdBy: currentUser.uid }); alert("Plan Creado"); document.getElementById('new-plan-name').value = ''; window.loadAdminPlans(); };
 window.deletePlan = async (id) => { if(confirm("¿Borrar plan?")) { await deleteDoc(doc(db, "plans", id)); window.loadAdminPlans(); } };
-window.openAssignPlanModal = async (planId) => { assignMode = 'plan'; selectedPlanForMassAssign = planId; const list = document.getElementById('assign-users-list'); window.openModal('modal-assign-plan'); try { const snap = await getDoc(doc(db, "plans", planId)); if (snap.exists()) document.getElementById('assign-plan-title').innerText = `Asignar "${snap.data().name}" a:`; let q = userData.role === 'assistant' ? query(collection(db, "users"), where("assignedCoach", "==", currentUser.uid)) : collection(db, "users"); const uSnap = await getDocs(q); list.innerHTML = ''; uSnap.forEach(d => { const u = d.data(); if (u.role === 'athlete') { const div = document.createElement('div'); div.className = "selector-item"; div.innerHTML = `<input type="checkbox" class="user-mass-check selector-checkbox" value="${d.id}" id="u-${d.id}"><label for="u-${d.id}" class="selector-label">${u.name}</label>`; list.appendChild(div); } }); } catch(e) { console.error(e); } };
+
+// FIX: Reparada también la asignación de planes para mantener consistencia UI
+window.openAssignPlanModal = async (planId) => { 
+    assignMode = 'plan'; 
+    selectedPlanForMassAssign = planId; 
+    const list = document.getElementById('assign-users-list'); 
+    window.openModal('modal-assign-plan'); 
+    try { 
+        const snap = await getDoc(doc(db, "plans", planId)); 
+        if (snap.exists()) document.getElementById('assign-plan-title').innerText = `Asignar "${snap.data().name}" a:`; 
+        
+        let q = userData.role === 'assistant' ? query(collection(db, "users"), where("assignedCoach", "==", currentUser.uid)) : collection(db, "users"); 
+        const uSnap = await getDocs(q); 
+        list.innerHTML = ''; 
+        uSnap.forEach(d => { 
+            const u = d.data(); 
+            if (u.role === 'athlete') { 
+                const div = document.createElement('div'); 
+                div.className = "selector-item user-select-card"; 
+                // Misma lógica visual
+                div.onclick = (e) => {
+                    if (e.target.type !== 'checkbox') {
+                        const cb = div.querySelector('input');
+                        cb.checked = !cb.checked;
+                    }
+                    if (div.querySelector('input').checked) {
+                         div.style.backgroundColor = 'rgba(255, 51, 51, 0.2)';
+                         div.style.border = '1px solid var(--accent-color)';
+                         div.classList.add('active-selection');
+                    } else {
+                         div.style.backgroundColor = 'transparent';
+                         div.style.border = '1px solid #333';
+                         div.classList.remove('active-selection');
+                    }
+                };
+                div.innerHTML = `<input type="checkbox" class="user-mass-check selector-checkbox" value="${d.id}" id="u-${d.id}" style="pointer-events:none;"><label class="selector-label" style="pointer-events:none;">${u.name}</label>`; 
+                list.appendChild(div); 
+            } 
+        }); 
+    } catch(e) { console.error(e); } 
+};
 
 window.distributePlan = async () => { 
     const checks = document.querySelectorAll('.user-mass-check:checked'); 
     if(checks.length === 0) return alert("Selecciona al menos un cliente."); 
     const userIds = Array.from(checks).map(c => c.value); 
     const btn = document.querySelector('#modal-assign-plan .btn'); 
+    const originalText = btn.innerText;
     btn.innerText = "ENVIANDO..."; 
+    btn.disabled = true;
 
     try { 
         if (assignMode === 'plan' && selectedPlanForMassAssign) { 
@@ -1010,7 +1270,8 @@ window.distributePlan = async () => {
     } catch(e) { 
         alert("Error: " + e.message); 
     } finally { 
-        btn.innerText = "✅ ENVIAR A SELECCIONADOS"; 
+        btn.innerText = originalText; 
+        btn.disabled = false;
     } 
 };
 
@@ -1025,16 +1286,16 @@ window.viewWorkoutDetails = (wId, routineName, detailsStr, noteStr, timeStr = ""
         let timeHtml = timeStr ? `<div style="text-align:center; color:#666; font-size:0.75rem; margin-bottom:10px;">Finalizado: ${timeStr}</div>` : "";
         
         // 2. Renderizar contenido (Modo Lectura por defecto)
-        let html = `
-            ${timeHtml}
-            <div class="detail-note-box">📝 ${note || "Sin notas."}</div>
-            <div id="history-details-container">
-                ${renderHistoryHTML(currentHistoryDetails)}
-            </div>
-            <div style="margin-top:20px; text-align:center;">
-                <button id="btn-edit-history" class="btn-outline" style="width:auto; border-color:var(--accent-color); color:var(--accent-color);" onclick="window.enableHistoryEdit()">✏️ EDITAR DATOS</button>
-                <button id="btn-save-history" class="btn hidden" style="width:auto; margin-top:10px;" onclick="window.saveHistoryChanges()">💾 GUARDAR CAMBIOS</button>
-            </div>
+        let html = `<br>
+            ${timeHtml}<br>
+            <div class="detail-note-box">📝 ${note || "Sin notas."}</div><br>
+            <div id="history-details-container"><br>
+                ${renderHistoryHTML(currentHistoryDetails)}<br>
+            </div><br>
+            <div style="margin-top:20px; text-align:center;"><br>
+                <button id="btn-edit-history" class="btn-outline" style="width:auto; border-color:var(--accent-color); color:var(--accent-color);" onclick="window.enableHistoryEdit()">✏️ EDITAR DATOS</button><br>
+                <button id="btn-save-history" class="btn hidden" style="width:auto; margin-top:10px;" onclick="window.saveHistoryChanges()">💾 GUARDAR CAMBIOS</button><br>
+            </div><br>
         `;
         
         document.getElementById('detail-title').innerText = routineName; 
@@ -1059,9 +1320,9 @@ function renderHistoryHTML(details) {
                 const dropStyle = s.isDrop ? 'border: 1px solid var(--warning-color); background: rgba(255, 170, 0, 0.15);' : ''; 
                 
                 // DATA ATTRIBUTES para poder leer los valores al editar
-                html += `<div class="detail-set-badge history-set-item" style="${dropStyle}" data-ex="${exIdx}" data-set="${i}">
-                    <span class="detail-set-num">#${num}</span>
-                    <span class="set-view"><b>${r}</b> <span style="color:#666">x</span> ${w}k</span>
+                html += `<div class="detail-set-badge history-set-item" style="${dropStyle}" data-ex="${exIdx}" data-set="${i}"><br>
+                    <span class="detail-set-num">#${num}</span><br>
+                    <span class="set-view"><b>${r}</b> <span style="color:#666">x</span> ${w}k</span><br>
                 </div>`; 
             }); 
         } else { html += `<div style="font-size:0.7rem; color:#666;">Sin datos.</div>`; } 
@@ -1078,12 +1339,12 @@ window.enableHistoryEdit = () => {
         const setObj = currentHistoryDetails[exIdx].s[setIdx];
         
         // Reemplazar texto por inputs
-        item.innerHTML = `
-            <div style="display:flex; gap:5px; align-items:center;">
-                <input type="number" class="hist-edit-reps" value="${setObj.r}" style="width:40px; padding:2px; margin:0; text-align:center; background:#000; border:1px solid #444;">
-                <span style="color:#666">x</span>
-                <input type="number" class="hist-edit-weight" value="${setObj.w}" style="width:40px; padding:2px; margin:0; text-align:center; background:#000; border:1px solid #444;">
-            </div>
+        item.innerHTML = `<br>
+            <div style="display:flex; gap:5px; align-items:center;"><br>
+                <input type="number" class="hist-edit-reps" value="${setObj.r}" style="width:40px; padding:2px; margin:0; text-align:center; background:#000; border:1px solid #444;"><br>
+                <span style="color:#666">x</span><br>
+                <input type="number" class="hist-edit-weight" value="${setObj.w}" style="width:40px; padding:2px; margin:0; text-align:center; background:#000; border:1px solid #444;"><br>
+            </div><br>
         `;
     });
     document.getElementById('btn-edit-history').classList.add('hidden');
@@ -1167,15 +1428,37 @@ window.openCoachView = async (uid, u) => {
     document.getElementById('coach-toggle-videos').checked = !!freshU.showVideos;
     const togglePhotos = document.getElementById('coach-toggle-photos'); if (togglePhotos) { togglePhotos.checked = freshU.showPhotos !== false; }
 
-    const configCard = document.querySelector('#ctab-content-profile .card:last-child');
-    if(configCard) {
-        if(!document.getElementById('coach-toggle-telegram')) {
-            const div = document.createElement('div'); div.style.cssText = "display:flex; justify-content:space-between; margin-top:10px; border-top:1px solid #333; padding-top:10px;";
-            div.innerHTML = `<span>🔓 Habilitar Chat Telegram</span><label class="switch"><input type="checkbox" id="coach-toggle-telegram" onchange="window.toggleUserFeature('allowTelegram', this.checked)"><span class="slider"></span></label>`;
-            configCard.appendChild(div);
-        }
-        document.getElementById('coach-toggle-telegram').checked = !!freshU.allowTelegram;
+    // --- FIX: TELEGRAM TOGGLE LOGIC ---
+    // Remove old one if exists to prevent duplicates
+    const existingTg = document.getElementById('coach-telegram-row');
+    if(existingTg) existingTg.remove();
+
+    // Find the video toggle row to inject after it
+    const videoToggleEl = document.getElementById('coach-toggle-videos');
+    if(videoToggleEl) {
+         // Assuming structure is inside a flex row div, getting parent
+         const videoRow = videoToggleEl.closest('div'); 
+         
+         const tgRow = document.createElement('div');
+         tgRow.id = 'coach-telegram-row';
+         tgRow.style.cssText = "display:flex; justify-content:space-between; align-items:center; margin-top:15px;"; 
+         tgRow.innerHTML = `
+            <span>Habilitar Chat Telegram</span>
+            <label class="switch">
+                <input type="checkbox" id="coach-toggle-telegram" onchange="window.toggleUserFeature('allowTelegram', this.checked)">
+                <span class="slider"></span>
+            </label>
+         `;
+         
+         // Insert after video row
+         if(videoRow && videoRow.parentNode) {
+            videoRow.parentNode.insertBefore(tgRow, videoRow.nextSibling);
+         }
+         
+         // FORCE CHECKED STATE (Critical Fix)
+         document.getElementById('coach-toggle-telegram').checked = !!freshU.allowTelegram;
     }
+    // ----------------------------------
 
     const dietSel = document.getElementById('coach-diet-select'); dietSel.innerHTML = '<option value="">-- Sin Dieta --</option>';
     AVAILABLE_DIETS.forEach(d => { const opt = new Option(d.name, d.file); if(freshU.dietFile === d.file) opt.selected = true; dietSel.appendChild(opt); });
@@ -1194,7 +1477,7 @@ window.openCoachView = async (uid, u) => {
     renderMuscleRadar('coachMuscleChart', freshU.muscleStats || {});
     const st = freshU.stats || {}; document.getElementById('coach-stats-text').innerHTML = `<div class="stat-pill"><b>${st.workouts||0}</b><span>ENTRENOS</span></div><div class="stat-pill"><b>${(st.totalKg/1000||0).toFixed(1)}t</b><span>CARGA</span></div><div class="stat-pill"><b>${st.totalReps||0}</b><span>REPS</span></div>`;
     
-    if(freshU.weightHistory) { fixCoachChart('coachWeightChart'); injectChartFilter('coachWeightChart', 'window.updateWeightChart'); coachChart = renderFilteredChart('coachWeightChart', coachChart, freshU.weightHistory, 'weight', '#ff3333', 90); }
+    if(freshU.weightHistory) { fixCoachChart('coachWeightChart'); injectChartFilter('coachWeightChart', 'window.updateWeightChart'); coachChart = renderFilteredChart('coachWeightChart', coachChart, freshU.weightHistory, 'weight', THEME_COLOR, 90); }
 
     const hList = document.getElementById('coach-history-list'); hList.innerHTML = 'Cargando...';
     const wSnap = await getDocs(query(collection(db,"workouts"), where("uid","==",uid))); hList.innerHTML = wSnap.empty ? 'Sin datos.' : '';
@@ -1208,6 +1491,108 @@ window.openCoachView = async (uid, u) => {
         hList.innerHTML += `<div class="history-row" style="grid-template-columns: 60px 1fr 30px 80px;"><div>${date}</div><div style="overflow:hidden; text-overflow:ellipsis;">${d.routine}</div><div>${d.rpe === 'Suave' ? '🟢' : (d.rpe === 'Duro' ? '🟠' : '🔴')}</div><button class="btn-small btn-outline" onclick="viewWorkoutDetails('${d.id}', '${d.routine}', '${encodeURIComponent(JSON.stringify(d.details))}', '${encodeURIComponent(d.note||"")}', '${infoStr}')">Ver</button></div>`;
     });
 };
+
+// ==========================================================
+// ⚡ COACH ACTIONS & TOGGLE FIX (CRITICAL)
+// ==========================================================
+
+window.toggleUserFeature = async (field, isActive) => {
+    if(!selectedUserCoach || !selectedUserObj) return;
+
+    // 1. UI Optimista (Responsive)
+    selectedUserObj[field] = isActive;
+
+    // 2. Toggle visual inmediato
+    const toggleMap = {
+        'showBio': 'coach-view-bio',
+        'showSkinfolds': 'coach-view-skinfolds',
+        'showMeasurements': 'coach-view-measures'
+    };
+    if(toggleMap[field]) {
+        const el = document.getElementById(toggleMap[field]);
+        if(el) isActive ? el.classList.remove('hidden') : el.classList.add('hidden');
+    }
+    if(field === 'showPhotos') {
+        const pCard = document.getElementById('coach-view-photos');
+        if(pCard) isActive ? pCard.classList.remove('hidden') : pCard.classList.add('hidden');
+    }
+
+    try {
+        await updateDoc(doc(db, "users", selectedUserCoach), { [field]: isActive });
+        console.log(`Updated ${field} to ${isActive}`);
+    } catch (e) {
+        console.error("Error updating toggle:", e);
+        alert("Error al guardar ajuste.");
+        // Revertir en caso de fallo
+        const chk = document.querySelector(`input[onchange*="${field}"]`);
+        if(chk) chk.checked = !isActive;
+    }
+};
+
+window.assignRoutine = async () => {
+    const sel = document.getElementById('coach-routine-select');
+    const rid = sel.value;
+    if(!rid || !selectedUserCoach) return alert("Selecciona una rutina");
+    
+    try {
+        await updateDoc(doc(db, "routines", rid), { assignedTo: arrayUnion(selectedUserCoach) });
+        await updateDoc(doc(db, "users", selectedUserCoach), { routineOrder: arrayUnion(rid) });
+        alert("✅ Rutina enviada.");
+        window.openCoachView(selectedUserCoach, selectedUserObj); 
+    } catch(e) { alert(e.message); }
+};
+
+window.unassignRoutine = async (rid) => {
+    if(!confirm("¿Quitar esta rutina del atleta?")) return;
+    try {
+        await updateDoc(doc(db, "routines", rid), { assignedTo: arrayRemove(selectedUserCoach) });
+        await updateDoc(doc(db, "users", selectedUserCoach), { routineOrder: arrayRemove(rid) });
+        alert("🗑️ Rutina retirada.");
+        window.openCoachView(selectedUserCoach, selectedUserObj);
+    } catch(e) { alert(e.message); }
+};
+
+window.assignPlan = async () => {
+     const sel = document.getElementById('coach-plan-select');
+     const pid = sel.value;
+     if(!pid) return;
+     if(!confirm("¿Asignar todo este plan?")) return;
+     try {
+        const snap = await getDoc(doc(db,"plans", pid));
+        if(!snap.exists()) return;
+        const routines = snap.data().routines || [];
+        const promises = routines.map(rid => updateDoc(doc(db,"routines",rid), { assignedTo: arrayUnion(selectedUserCoach) }));
+        await Promise.all(promises);
+        await updateDoc(doc(db, "users", selectedUserCoach), { routineOrder: routines });
+        alert("✅ Plan asignado.");
+        window.openCoachView(selectedUserCoach, selectedUserObj);
+     } catch(e) { alert("Error: " + e.message); }
+};
+
+window.approveUser = async () => {
+    if(!selectedUserCoach) return;
+    if(confirm("¿Aprobar acceso a este atleta?")) {
+        await updateDoc(doc(db, "users", selectedUserCoach), { approved: true });
+        alert("✅ Usuario Aprobado");
+        window.openCoachView(selectedUserCoach, selectedUserObj);
+    }
+};
+
+window.deleteUser = async () => {
+    if(!selectedUserCoach) return;
+    const confirmName = prompt(`⚠️ PELIGRO:\nEscribe "BORRAR" para eliminar permanentemente a ${selectedUserObj.name}.\nSe perderán todos sus datos.`);
+    if(confirmName === "BORRAR") {
+         await deleteDoc(doc(db, "users", selectedUserCoach));
+         alert("Usuario eliminado.");
+         window.loadAdminUsers(true);
+         window.switchTab('admin-view');
+    }
+};
+
+window.goToCreateRoutine = () => {
+    window.openEditor();
+};
+// ==========================================================
 
 document.getElementById('btn-register').onclick=async()=>{
     const secretCode = document.getElementById('reg-code').value; const tgUser = document.getElementById('reg-telegram')?.value || ""; 
