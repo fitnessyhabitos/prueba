@@ -913,7 +913,7 @@ window.openCoachView = async (uid, u) => {
     assigned.forEach(r => { 
         const div = document.createElement('div'); div.className = "assigned-routine-item"; 
         // BOTÓN MODO ENTRENADOR
-        const btnGhost = `<button class="btn-small btn" style="margin:0; width:auto; font-size:0.7rem; background:var(--accent-color); color:#000; margin-right:10px;" onclick="window.startWorkout('${r.id}', '${uid}')">▶️ ENTRENAR CLIENTE</button>`;
+        const btnGhost = `<button class="btn-small btn" style="margin:0; width:auto; font-size:0.7rem; background:var(--accent-color); color:#000; margin-right:10px;" onclick="window.startWorkout('${r.id}', '${uid}')">▶️ 🏋🏻‍♂️</button>`;
         div.innerHTML = `<span>${r.name}</span><div style="display:flex;align-items:center;">${btnGhost}<button style="background:none;border:none;color:#f55;font-weight:bold;cursor:pointer;" onclick="window.unassignRoutine('${r.id}')">❌</button></div>`; 
         rList.appendChild(div); 
     }); 
