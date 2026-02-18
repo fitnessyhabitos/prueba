@@ -50,6 +50,15 @@
     </header>
 
     <main id="main-container">
+
+        <div id="active-workout-bar" class="hidden" onclick="window.switchTab('workout-view')">
+    <div class="pulsing-dot"></div>
+    <div style="flex:1;">
+        <div style="font-weight:bold; font-size:0.9rem; color:var(--accent-color);">ENTRENO EN CURSO</div>
+        <div style="font-size:0.75rem; color:#ccc;" id="bar-timer">00:00</div>
+    </div>
+    <button class="btn-small btn" style="margin:0; background:var(--accent-color); color:black;">VOLVER ⬈</button>
+</div>
         
         <section id="auth-view" class="view-container active">
             <div style="text-align:center; margin: 50px 0;">
