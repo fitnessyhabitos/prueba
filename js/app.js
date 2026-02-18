@@ -4,7 +4,7 @@ import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, onSnapshot, q
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 import { EXERCISES } from './data.js';
 
-console.log("⚡ FIT DATA: App v16.3 (Syntax Fix - Clean)...");
+console.log("⚡ FIT DATA: App v16.4 (Clean & Deduplicated)...");
 
 // --- 1. Service Worker ---
 if ('serviceWorker' in navigator) {
@@ -82,7 +82,7 @@ let exercisesObserver = null;
 const BATCH_SIZE = 20;
 
 // ===========================================================
-// ⚡ CORE HELPER FUNCTIONS (DEFINIDAS UNA SOLA VEZ AQUÍ)
+// ⚡ CORE HELPER FUNCTIONS (DEFINIDAS AQUÍ UNA SOLA VEZ)
 // ===========================================================
 
 function checkPhotoVisualReminder() {
@@ -471,7 +471,7 @@ window.finishWorkout = async (rpeVal) => {
     } catch (error) { console.error("Error finish:", error); alert("Error crítico al guardar."); }
 };
 
-// --- RENDERIZADO ---
+// --- RENDERIZADO RUTINAS ---
 async function loadRoutines() {
     const l = document.getElementById('routines-list'); l.innerHTML = 'Cargando...';
     onSnapshot(query(collection(db,"routines")), (s)=>{
@@ -489,6 +489,7 @@ async function loadRoutines() {
     });
 }
 
+// --- COACH VIEW ---
 window.openCoachView = async (uid, u) => {
     selectedUserCoach=uid; 
     updateDoc(doc(db, "users", uid), { lastWorkoutSeen: serverTimestamp() }).catch(e => console.log("Error marking seen", e));
@@ -645,9 +646,6 @@ window.saveHistoryChanges = async () => { const items = document.querySelectorAl
 window.openNoticeEditor = async (uid) => { noticeTargetUid = uid; document.getElementById('notice-title').value = ''; document.getElementById('notice-text').value = ''; document.getElementById('notice-img-file').value = ''; document.getElementById('notice-link').value = ''; const modalTitle = document.getElementById('notice-modal-title'); modalTitle.innerText = uid === 'GLOBAL' ? '📢 CREAR AVISO PARA TODOS' : '📢 AVISO INDIVIDUAL'; try { let existing = null; if(uid === 'GLOBAL') { const snap = await getDoc(doc(db, "settings", "globalNotice")); if(snap.exists()) existing = snap.data(); } else { const snap = await getDoc(doc(db, "users", uid)); if(snap.exists() && snap.data().coachNotice) existing = snap.data().coachNotice; } if(existing) { document.getElementById('notice-title').value = existing.title || ''; document.getElementById('notice-text').value = existing.text || ''; document.getElementById('notice-link').value = existing.link || ''; } } catch(e) { console.error(e); } window.openModal('modal-notice-editor'); };
 window.saveNotice = async () => { const t = document.getElementById('notice-title').value; const txt = document.getElementById('notice-text').value; const lnk = document.getElementById('notice-link').value; const fileInp = document.getElementById('notice-img-file'); if(!t || !txt) return alert("Faltan datos."); const btn = document.getElementById('btn-save-notice'); btn.innerText = "SUBIENDO..."; btn.disabled = true; try { let imgUrl = ""; if(fileInp.files.length > 0) { const file = fileInp.files[0]; const snapshot = await uploadBytes(ref(storage, `notices/${noticeTargetUid}/${Date.now()}.jpg`), file); imgUrl = await getDownloadURL(snapshot.ref); } else { if(noticeTargetUid === 'GLOBAL') { const snap = await getDoc(doc(db, "settings", "globalNotice")); if(snap.exists()) imgUrl = snap.data().img || ""; } else { const snap = await getDoc(doc(db, "users", noticeTargetUid)); if(snap.exists() && snap.data().coachNotice) imgUrl = snap.data().coachNotice.img || ""; } } const noticeData = { id: Date.now().toString(), title: t, text: txt, img: imgUrl, link: lnk, date: new Date().toISOString(), active: true }; if(noticeTargetUid === 'GLOBAL') { await setDoc(doc(db, "settings", "globalNotice"), noticeData); alert("✅ Aviso Global"); } else { await updateDoc(doc(db, "users", noticeTargetUid), { coachNotice: noticeData }); alert("✅ Aviso Individual"); } window.closeModal('modal-notice-editor'); } catch(e) { alert("Error: " + e.message); } finally { btn.innerText = "PUBLICAR AVISO"; btn.disabled = false; } };
 window.deleteNotice = async () => { if(!confirm("¿Borrar?")) return; try { if(noticeTargetUid === 'GLOBAL') { await deleteDoc(doc(db, "settings", "globalNotice")); } else { await updateDoc(doc(db, "users", noticeTargetUid), { coachNotice: null }); } alert("🗑️ Eliminado"); window.closeModal('modal-notice-editor'); } catch(e) { alert("Error"); } };
-async function checkNotices() { if(userData.role === 'admin' || userData.role === 'assistant') return; if(userData.coachNotice && userData.coachNotice.active) { showNoticeModal(userData.coachNotice, "MENSAJE DEL COACH", 'INDIVIDUAL'); return; } try { const snap = await getDoc(doc(db, "settings", "globalNotice")); if(snap.exists()) { const notice = snap.data(); if(!notice.active) return; const dismissedId = localStorage.getItem('dismissed_global_notice_id'); if(notice.id && notice.id !== dismissedId) { showNoticeModal(notice, "AVISO DE LA COMUNIDAD", 'GLOBAL'); } } } catch(e) {} }
-function showNoticeModal(notice, headerTitle, type) { currentNoticeId = notice.id; currentNoticeType = type; document.getElementById('viewer-header').innerText = headerTitle; document.getElementById('viewer-title').innerText = notice.title; document.getElementById('viewer-text').innerText = notice.text; const imgEl = document.getElementById('viewer-img'); if(notice.img) { imgEl.src = notice.img; imgEl.classList.remove('hidden'); imgEl.onclick = () => window.viewFullImage(notice.img); } else { imgEl.classList.add('hidden'); } const linkBtn = document.getElementById('viewer-link-btn'); if(notice.link) { linkBtn.classList.remove('hidden'); linkBtn.onclick = () => window.open(notice.link, '_blank'); } else { linkBtn.classList.add('hidden'); } window.openModal('modal-notice-viewer'); }
-window.dismissNotice = async () => { if (currentNoticeType === 'GLOBAL') { if(currentNoticeId) localStorage.setItem('dismissed_global_notice_id', currentNoticeId); } else if (currentNoticeType === 'INDIVIDUAL') { try { await updateDoc(doc(db, "users", currentUser.uid), { "coachNotice.active": false }); if(userData.coachNotice) userData.coachNotice.active = false; } catch(e) {} } window.closeModal('modal-notice-viewer'); };
 window.toggleUserFeature = async (field, isActive) => { if(!selectedUserCoach || !selectedUserObj) return; selectedUserObj[field] = isActive; const toggleMap = { 'showBio': 'coach-view-bio', 'showSkinfolds': 'coach-view-skinfolds', 'showMeasurements': 'coach-view-measures' }; if(toggleMap[field]) { const el = document.getElementById(toggleMap[field]); if(el) isActive ? el.classList.remove('hidden') : el.classList.add('hidden'); } if(field === 'showPhotos') { const pCard = document.getElementById('coach-view-photos'); if(pCard) isActive ? pCard.classList.remove('hidden') : pCard.classList.add('hidden'); } try { await updateDoc(doc(db, "users", selectedUserCoach), { [field]: isActive }); console.log(`Updated ${field} to ${isActive}`); } catch (e) { console.error("Error updating toggle:", e); alert("Error al guardar ajuste."); const chk = document.querySelector(`input[onchange*="${field}"]`); if(chk) chk.checked = !isActive; } };
 window.assignRoutine = async () => { const sel = document.getElementById('coach-routine-select'); const rid = sel.value; if(!rid || !selectedUserCoach) return alert("Selecciona una rutina"); try { await updateDoc(doc(db, "routines", rid), { assignedTo: arrayUnion(selectedUserCoach) }); await updateDoc(doc(db, "users", selectedUserCoach), { routineOrder: arrayUnion(rid) }); alert("✅ Rutina enviada."); window.openCoachView(selectedUserCoach, selectedUserObj); } catch(e) { alert(e.message); } };
 window.unassignRoutine = async (rid) => { if(!confirm("¿Quitar esta rutina del atleta?")) return; try { await updateDoc(doc(db, "routines", rid), { assignedTo: arrayRemove(selectedUserCoach) }); await updateDoc(doc(db, "users", selectedUserCoach), { routineOrder: arrayRemove(rid) }); alert("🗑️ Rutina retirada."); window.openCoachView(selectedUserCoach, selectedUserObj); } catch(e) { alert(e.message); } };
