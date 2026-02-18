@@ -366,3 +366,34 @@ canvas { padding-bottom: 5px; }
   border-color: var(--accent-color) !important;
   color: var(--accent-color) !important;
 }
+
+/* Barra flotante estilo Spotify */
+#active-workout-bar {
+    position: fixed;
+    bottom: 20px; /* Encima de la zona segura en iOS */
+    left: 5%;
+    width: 90%;
+    background: rgba(20, 20, 20, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--accent-color);
+    border-radius: 12px;
+    padding: 10px 15px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    z-index: 5000;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+    cursor: pointer;
+    animation: slideUp 0.3s ease-out;
+}
+#active-workout-bar.hidden { display: none !important; }
+
+.pulsing-dot {
+    width: 10px; height: 10px;
+    background: var(--accent-color);
+    border-radius: 50%;
+    animation: pulse-dot 1.5s infinite;
+}
+
+@keyframes slideUp { from { transform: translateY(100px); } to { transform: translateY(0); } }
+@keyframes pulse-dot { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1); } }
