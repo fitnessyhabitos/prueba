@@ -4,14 +4,12 @@ import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, onSnapshot, q
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 import { EXERCISES } from './data.js';
 
-console.log("⚡ FIT DATA: App v16.1 (Stable Fix)...");
+console.log("⚡ FIT DATA: App v16.2 (Hoisting Fix & Stability)...");
 
-// --- 1. Service Worker (Offline) ---
+// --- 1. Service Worker ---
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-            .then(reg => console.log('✅ SW OK'))
-            .catch(err => console.error('❌ SW Error', err));
+        navigator.serviceWorker.register('./sw.js').catch(err => console.error('SW Error:', err));
     });
 }
 
@@ -29,14 +27,9 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-// Persistencia
-try { 
-    enableIndexedDbPersistence(db).catch((err) => {
-        console.warn("Persistencia offline:", err.code);
-    });
-} catch(e) {}
+try { enableIndexedDbPersistence(db).catch(() => {}); } catch(e) {}
 
-// --- VARIABLES ---
+// --- VARIABLES GLOBALES ---
 const AVAILABLE_DIETS = [
     { name: "Dieta Volumen (3000kcal)", file: "volumen_3000.html" },
     { name: "Dieta Definición (2000kcal)", file: "definicion_2000.html" },
@@ -67,7 +60,6 @@ let adminUsersCache = null;
 let editingHistoryId = null; 
 let currentHistoryDetails = null; 
 
-// Charts
 let chartInstance = null; let progressChart = null; let fatChartInstance = null; let bioChartInstance = null; let measureChartInstance = null; let coachFatChart = null; let coachBioChart = null; let coachMeasureChart = null; let radarChartInstance = null; let coachChart = null; let userRadarChart = null; let coachRadarChart = null;
 
 let selectedUserCoach = null; 
@@ -84,13 +76,83 @@ let selectedRoutineForMassAssign = null;
 let assignMode = 'plan'; 
 let noticeTargetUid = null; 
 
-// Infinite Scroll
 let exercisesBatchIndex = 0;
 let filteredExercisesList = [];
 let exercisesObserver = null;
 const BATCH_SIZE = 20;
 
-// --- AUTH OBSERVER (LA CLAVE DEL ARREGLO) ---
+// ===========================================================
+// ⚡ CORE HELPER FUNCTIONS (MOVIDAS ARRIBA PARA EVITAR ERRORES)
+// ===========================================================
+
+function checkPhotoVisualReminder() {
+    const bannerId = 'photo-missing-banner'; const existing = document.getElementById(bannerId); if(existing) existing.remove();
+    if(!userData.photo || userData.photo === "") {
+        const div = document.createElement('div'); div.id = bannerId; div.style.cssText = "background: #ffaa00; color: #000; padding: 10px; text-align: center; font-weight: bold; font-size: 0.9rem; cursor: pointer; animation: pulse 2s infinite; margin-top:5px;"; div.innerHTML = "📸 ¡Sube tu foto de perfil para aparecer en el Ranking! (Click aquí)"; div.onclick = () => { switchTab('profile-view'); };
+        const header = document.getElementById('main-header'); if(header && header.parentNode) header.parentNode.insertBefore(div, header.nextSibling);
+    }
+}
+
+function checkPhotoReminder() { if(!userData.photoDay) return; const now = new Date(); const day = now.getDay(); const time = now.toTimeString().substr(0,5); if(day == userData.photoDay && time === userData.photoTime) alert("📸 HORA DE TU FOTO DE PROGRESO 📸"); }
+
+function initCommunityListener() {
+    if (communityUnsubscribe) communityUnsubscribe(); 
+    const q = query(collection(db, "workouts"), orderBy("date", "desc"), limit(1));
+    communityUnsubscribe = onSnapshot(q, (snapshot) => {
+        snapshot.docChanges().forEach(async (change) => {
+            if (change.type === "added") {
+                const w = change.doc.data();
+                const now = Date.now() / 1000;
+                const workoutTime = w.date ? w.date.seconds : 0;
+                if (now - workoutTime < 60 && w.uid !== currentUser.uid) { showToast(`🔥 Alguien terminó: ${w.routine}`); }
+            }
+        });
+    });
+}
+
+function injectTelegramUI() {
+    const regForm = document.getElementById('register-form');
+    const regEmail = document.getElementById('reg-email');
+    if (regForm && regEmail && !document.getElementById('reg-telegram')) {
+        const input = document.createElement('input');
+        input.type = 'text'; input.id = 'reg-telegram'; input.placeholder = 'Usuario Telegram (ej: @juanperez)';
+        input.style.marginBottom = '10px';
+        regEmail.parentNode.insertBefore(input, regEmail);
+    }
+    const restInput = document.getElementById('cfg-rest-time');
+    const existingUi = document.getElementById('telegram-ui-wrapper');
+    if(existingUi) existingUi.remove();
+    if (restInput && userData?.allowTelegram) { 
+        const wrapper = document.createElement('div');
+        wrapper.id = 'telegram-ui-wrapper';
+        wrapper.style.cssText = "width: 100%; margin-top: 25px; margin-bottom: 25px; text-align: center; border-top: 1px solid #222; padding-top: 15px;"; 
+        const telegramIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right:8px;"><path d="M20.665 3.717l-17.73 6.837c-1.21.486-1.203 1.161-.222 1.462l4.552 1.42 10.532-6.645c.498-.303.953-.14.579.192l-8.533 7.701h-.002l.002.001-.314 4.692c.46 0 .663-.211.921-.46l2.211-2.15 4.599 3.397c.848.467 1.457.227 1.668-.785l3.019-14.228c.309-1.239-.473-1.8-1.282-1.434z" fill="white"/></svg>`;
+        wrapper.innerHTML = `<label style="display:block; margin-bottom:8px; font-size:0.85rem; color:#aaa; font-weight:bold;">📸 Tu Usuario Telegram (Activo)</label><input type="text" id="cfg-telegram" placeholder="@usuario" value="${userData.telegram || ''}" style="width: 70%; max-width: 250px; margin: 0 auto 15px auto; background: #1a1a1a; border: 1px solid var(--accent-color); color: white; padding: 10px; border-radius: 8px; text-align: center; display:block;"><button onclick="window.contactCoach()" class="btn" style="width: auto; margin: 0 auto; padding: 12px 25px; border-radius: 50px; font-size: 0.85rem; display:flex; align-items:center; justify-content:center;">${telegramIcon} Contactar Coach</button>`;
+        restInput.parentElement.insertAdjacentElement('afterend', wrapper);
+    }
+}
+
+async function checkNotices() { 
+    if(userData.role === 'admin' || userData.role === 'assistant') return; 
+    if(userData.coachNotice && userData.coachNotice.active) { showNoticeModal(userData.coachNotice, "MENSAJE DEL COACH", 'INDIVIDUAL'); return; } 
+    try { const snap = await getDoc(doc(db, "settings", "globalNotice")); if(snap.exists()) { const notice = snap.data(); if(!notice.active) return; const dismissedId = localStorage.getItem('dismissed_global_notice_id'); if(notice.id && notice.id !== dismissedId) { showNoticeModal(notice, "AVISO DE LA COMUNIDAD", 'GLOBAL'); } } } catch(e) {} 
+}
+
+function showNoticeModal(notice, headerTitle, type) { 
+    currentNoticeId = notice.id; currentNoticeType = type; 
+    const h = document.getElementById('viewer-header'); if(h) h.innerText = headerTitle; 
+    const t = document.getElementById('viewer-title'); if(t) t.innerText = notice.title; 
+    const txt = document.getElementById('viewer-text'); if(txt) txt.innerText = notice.text; 
+    const imgEl = document.getElementById('viewer-img'); 
+    if(notice.img) { imgEl.src = notice.img; imgEl.classList.remove('hidden'); imgEl.onclick = () => window.viewFullImage(notice.img); } else { imgEl.classList.add('hidden'); } 
+    const linkBtn = document.getElementById('viewer-link-btn'); 
+    if(notice.link) { linkBtn.classList.remove('hidden'); linkBtn.onclick = () => window.open(notice.link, '_blank'); } else { linkBtn.classList.add('hidden'); } 
+    window.openModal('modal-notice-viewer'); 
+}
+
+// ===========================================================
+// ⚡ AUTH OBSERVER
+// ===========================================================
 onAuthStateChanged(auth, async (user) => {
     const loadingScreen = document.getElementById('loading-screen');
     
@@ -98,7 +160,7 @@ onAuthStateChanged(auth, async (user) => {
         console.log("✅ Usuario detectado:", user.uid);
         currentUser = user;
         
-        // 1. Restauración Segura (Try/Catch crítico)
+        // Restauración Segura
         const savedW = localStorage.getItem('fit_active_workout');
         if(savedW && savedW !== "undefined" && savedW !== "null") { 
             try { 
@@ -118,8 +180,9 @@ onAuthStateChanged(auth, async (user) => {
             const snap = await getDoc(doc(db,"users",user.uid));
             if(snap.exists()){
                 userData = snap.data();
-                console.log("Datos de usuario cargados.");
+                console.log("Datos cargados. Ejecutando helpers...");
                 
+                // AHORA ES SEGURO LLAMAR A ESTAS FUNCIONES
                 checkPhotoVisualReminder();
                 initCommunityListener();
                 checkPhotoReminder();
@@ -136,13 +199,11 @@ onAuthStateChanged(auth, async (user) => {
                 }
 
                 if(userData.approved){
-                    // OCULTAR CARGA Y MOSTRAR APP
                     if(loadingScreen) { loadingScreen.style.opacity = '0'; setTimeout(() => loadingScreen.classList.add('hidden'), 300); }
                     document.getElementById('main-header').classList.remove('hidden');
                     
-                    loadRoutines(); // Cargar rutinas en segundo plano
+                    loadRoutines(); 
                     
-                    // Decidir qué pantalla mostrar
                     if(activeWorkout) {
                         console.log("--> Redirigiendo a Entreno Activo");
                         renderWorkout();
@@ -159,7 +220,6 @@ onAuthStateChanged(auth, async (user) => {
                 }
             } else {
                 console.log("No existe documento de usuario.");
-                // Posible error de registro a medias, forzar logout
                 signOut(auth);
             }
         } catch(e) { 
@@ -175,7 +235,7 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// --- NAVEGACIÓN Y BARRA FLOTANTE ---
+// --- NAVEGACIÓN ---
 let scrollPos = 0;
 window.openModal = (id) => { scrollPos = window.pageYOffset; document.body.style.top = `-${scrollPos}px`; document.body.classList.add('modal-open'); const m = document.getElementById(id); if(m) m.classList.add('active'); };
 window.closeModal = (id) => { const m = document.getElementById(id); if(m) m.classList.remove('active'); document.body.classList.remove('modal-open'); document.body.style.top = ''; window.scrollTo(0, scrollPos); };
@@ -183,7 +243,6 @@ const normalizeText = (text) => { if(!text) return ""; return text.normalize("NF
 window.toggleElement = (id) => { const el = document.getElementById(id); if(el) el.classList.toggle('hidden'); };
 
 window.switchTab = (t) => {
-    // Control de Barra Flotante
     const bar = document.getElementById('active-workout-bar');
     if(activeWorkout && t !== 'workout-view') {
         if(bar) {
@@ -198,13 +257,8 @@ window.switchTab = (t) => {
     }
 
     if (t === 'workout-view') {
-        if(!activeWorkout) {
-            console.warn("Intento de ir a workout sin datos. Redirigiendo.");
-            t = 'routines-view';
-        } else { 
-            renderWorkout(); 
-            startTimerMini(); 
-        }
+        if(!activeWorkout) { t = 'routines-view'; } 
+        else { renderWorkout(); startTimerMini(); }
     }
 
     document.querySelectorAll('.view-container').forEach(e => e.classList.remove('active'));
@@ -227,14 +281,17 @@ document.body.addEventListener('click', initAudioEngine, {once:true});
 // --- UTILS ---
 function getWeekNumber(d) { d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7)); var yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1)); var weekNo = Math.ceil(( ( (d - yearStart) / 86400000) + 1)/7); return d.getUTCFullYear() + "_W" + weekNo; }
 
-// --- HISTORIAL & PERFIL ---
+// --- PERFIL ---
 window.loadProfile = async () => {
     if(!userData) return;
     document.getElementById('profile-name').innerText = userData.name;
     if(userData.photo) document.getElementById('avatar-img').src = userData.photo;
     
-    // ...charts loading...
-    
+    // Charts (abreviado)
+    const fixChartContainer = (id) => { const c = document.getElementById(id); if(c && c.parentElement) { c.parentElement.style.height = '250px'; c.parentElement.style.marginBottom = '35px'; } };
+    if(userData.weightHistory) { fixChartContainer('weightChart'); injectChartFilter('weightChart', 'window.updateWeightChart'); chartInstance = renderFilteredChart('weightChart', chartInstance, userData.weightHistory, 'weight', '#ff3333', 9999); }
+    renderMuscleRadar('userMuscleChart', userData.muscleStats || {});
+
     const histDiv = document.getElementById('user-history-list'); histDiv.innerHTML = "Cargando...";
     try {
         const q = query(collection(db, "workouts"), where("uid", "==", currentUser.uid));
@@ -403,7 +460,7 @@ window.finishWorkout = async (rpeVal) => {
     } catch (error) { console.error("Error finish:", error); alert("Error crítico al guardar."); }
 };
 
-// --- RENDERIZADO RUTINAS ---
+// --- RENDERIZADO ---
 async function loadRoutines() {
     const l = document.getElementById('routines-list'); l.innerHTML = 'Cargando...';
     onSnapshot(query(collection(db,"routines")), (s)=>{
@@ -421,7 +478,6 @@ async function loadRoutines() {
     });
 }
 
-// --- COACH VIEW ---
 window.openCoachView = async (uid, u) => {
     selectedUserCoach=uid; 
     updateDoc(doc(db, "users", uid), { lastWorkoutSeen: serverTimestamp() }).catch(e => console.log("Error marking seen", e));
@@ -581,7 +637,6 @@ window.deleteNotice = async () => { if(!confirm("¿Borrar?")) return; try { if(n
 async function checkNotices() { if(userData.role === 'admin' || userData.role === 'assistant') return; if(userData.coachNotice && userData.coachNotice.active) { showNoticeModal(userData.coachNotice, "MENSAJE DEL COACH", 'INDIVIDUAL'); return; } try { const snap = await getDoc(doc(db, "settings", "globalNotice")); if(snap.exists()) { const notice = snap.data(); if(!notice.active) return; const dismissedId = localStorage.getItem('dismissed_global_notice_id'); if(notice.id && notice.id !== dismissedId) { showNoticeModal(notice, "AVISO DE LA COMUNIDAD", 'GLOBAL'); } } } catch(e) {} }
 function showNoticeModal(notice, headerTitle, type) { currentNoticeId = notice.id; currentNoticeType = type; document.getElementById('viewer-header').innerText = headerTitle; document.getElementById('viewer-title').innerText = notice.title; document.getElementById('viewer-text').innerText = notice.text; const imgEl = document.getElementById('viewer-img'); if(notice.img) { imgEl.src = notice.img; imgEl.classList.remove('hidden'); imgEl.onclick = () => window.viewFullImage(notice.img); } else { imgEl.classList.add('hidden'); } const linkBtn = document.getElementById('viewer-link-btn'); if(notice.link) { linkBtn.classList.remove('hidden'); linkBtn.onclick = () => window.open(notice.link, '_blank'); } else { linkBtn.classList.add('hidden'); } window.openModal('modal-notice-viewer'); }
 window.dismissNotice = async () => { if (currentNoticeType === 'GLOBAL') { if(currentNoticeId) localStorage.setItem('dismissed_global_notice_id', currentNoticeId); } else if (currentNoticeType === 'INDIVIDUAL') { try { await updateDoc(doc(db, "users", currentUser.uid), { "coachNotice.active": false }); if(userData.coachNotice) userData.coachNotice.active = false; } catch(e) {} } window.closeModal('modal-notice-viewer'); };
-window.openCoachView = async (uid, u) => { selectedUserCoach=uid; updateDoc(doc(db, "users", uid), { lastWorkoutSeen: serverTimestamp() }).catch(e => console.log("Error marking seen", e)); const freshSnap = await getDoc(doc(db, "users", uid)); const freshU = freshSnap.data(); selectedUserObj = freshU; switchTab('coach-detail-view'); document.getElementById('coach-user-name').innerText=freshU.name + (freshU.role === 'assistant' ? ' (Coach 🛡️)' : ''); document.getElementById('coach-user-email').innerText=freshU.email; document.getElementById('coach-user-meta').innerText = `${freshU.gender === 'female' ? '♀️' : '♂️'} ${freshU.age} años • ${freshU.height} cm`; const telegramHtml = freshU.telegram ? `<div style="font-size:0.8rem; color:#0088cc; margin-top:5px;">Telegram: ${freshU.telegram}</div>` : ''; document.getElementById('coach-user-email').innerHTML += telegramHtml; if(freshU.photo) { document.getElementById('coach-user-img').src = freshU.photo; document.getElementById('coach-user-img').style.display = 'block'; document.getElementById('coach-user-initial').style.display = 'none'; } else { document.getElementById('coach-user-img').style.display = 'none'; document.getElementById('coach-user-initial').style.display = 'block'; document.getElementById('coach-user-initial').innerText = freshU.name.charAt(0).toUpperCase(); } document.getElementById('pending-approval-banner').classList.toggle('hidden', freshU.approved); updateCoachPhotoDisplay('front'); const coachPhotoCard = document.getElementById('coach-view-photos'); if (coachPhotoCard) { if (freshU.showPhotos === false) { coachPhotoCard.classList.add('hidden'); } else { coachPhotoCard.classList.remove('hidden'); } } const fixCoachChart = (id) => { const c = document.getElementById(id); if(c && c.parentElement) { c.parentElement.style.height = '250px'; c.parentElement.style.marginBottom = '35px'; } }; if(freshU.bioHistory && freshU.showBio) { document.getElementById('coach-view-bio').classList.remove('hidden'); fixCoachChart('coachBioChart'); injectChartFilter('coachBioChart', 'window.updateBioChart'); renderFilteredChart('coachBioChart', coachBioChart, freshU.bioHistory, 'muscle', '#00ffff', 90); } else { document.getElementById('coach-view-bio').classList.add('hidden'); } if(freshU.skinfoldHistory && freshU.showSkinfolds) { document.getElementById('coach-view-skinfolds').classList.remove('hidden'); fixCoachChart('coachFatChart'); injectChartFilter('coachFatChart', 'window.updateFatChart'); renderFilteredChart('coachFatChart', coachFatChart, freshU.skinfoldHistory, 'fat', '#ffaa00', 90); } else { document.getElementById('coach-view-skinfolds').classList.add('hidden'); } if(freshU.measureHistory && freshU.showMeasurements) { document.getElementById('coach-view-measures').classList.remove('hidden'); fixCoachChart('coachMeasuresChart'); injectChartFilter('coachMeasuresChart', 'window.updateMeasureChart'); renderFilteredMeasureChart('coachMeasuresChart', coachMeasureChart, freshU.measureHistory, 90); } else { document.getElementById('coach-view-measures').classList.add('hidden'); } document.getElementById('coach-toggle-bio').checked = !!freshU.showBio; document.getElementById('coach-toggle-skinfolds').checked = !!freshU.showSkinfolds; document.getElementById('coach-toggle-measures').checked = !!freshU.showMeasurements; document.getElementById('coach-toggle-videos').checked = !!freshU.showVideos; const togglePhotos = document.getElementById('coach-toggle-photos'); if (togglePhotos) { togglePhotos.checked = freshU.showPhotos !== false; } const existingTg = document.getElementById('coach-telegram-row'); if(existingTg) existingTg.remove(); const videoToggleEl = document.getElementById('coach-toggle-videos'); if(videoToggleEl) { const videoRow = videoToggleEl.closest('div'); const tgRow = document.createElement('div'); tgRow.id = 'coach-telegram-row'; tgRow.style.cssText = "display:flex; justify-content:space-between; align-items:center; margin-top:15px;"; tgRow.innerHTML = `<span>Habilitar Chat Telegram</span><label class="switch"><input type="checkbox" id="coach-toggle-telegram" onchange="window.toggleUserFeature('allowTelegram', this.checked)"><span class="slider"></span></label>`; if(videoRow && videoRow.parentNode) { videoRow.parentNode.insertBefore(tgRow, videoRow.nextSibling); } document.getElementById('coach-toggle-telegram').checked = !!freshU.allowTelegram; } const dietSel = document.getElementById('coach-diet-select'); dietSel.innerHTML = '<option value="">-- Sin Dieta --</option>'; AVAILABLE_DIETS.forEach(d => { const opt = new Option(d.name, d.file); if(freshU.dietFile === d.file) opt.selected = true; dietSel.appendChild(opt); }); const rList = document.getElementById('coach-assigned-list'); rList.innerHTML = 'Cargando...'; const allRoutinesSnap = await getDocs(collection(db, "routines")); allRoutinesCache = []; const s = document.getElementById('coach-routine-select'); s.innerHTML = '<option value="">Selecciona rutina...</option>'; allRoutinesSnap.forEach(r => { const data = r.data(); allRoutinesCache.push({id: r.id, ...data}); s.add(new Option(data.name, r.id)); }); const pSelect = document.getElementById('coach-plan-select'); pSelect.innerHTML = '<option value="">Selecciona plan...</option>'; const allPlansSnap = await getDocs(collection(db, "plans")); allPlansSnap.forEach(p => pSelect.add(new Option(p.data().name, p.id))); const assigned = allRoutinesCache.filter(r => (r.assignedTo || []).includes(uid)); rList.innerHTML = assigned.length ? '' : 'Ninguna rutina.'; assigned.forEach(r => { const div = document.createElement('div'); div.className = "assigned-routine-item"; div.innerHTML = `<span>${r.name}</span><div style="display:flex; gap:10px;"><button class="btn-small btn" style="margin:0; width:auto; background:var(--accent-color); color:black; font-weight:bold;" onclick="window.startWorkout('${r.id}', '${uid}', '${freshU.name}')">💪 ENTRENAR</button><button style="background:none;border:none;color:#f55;font-weight:bold;cursor:pointer;" onclick="window.unassignRoutine('${r.id}')">❌</button></div>`; rList.appendChild(div); }); const hList = document.getElementById('coach-history-list'); hList.innerHTML = 'Cargando...'; const wSnap = await getDocs(query(collection(db,"workouts"), where("uid","==",uid))); hList.innerHTML = wSnap.empty ? 'Sin datos.' : ''; wSnap.docs.map(doc => ({id: doc.id, ...doc.data()})).sort((a,b) => b.date - a.date).slice(0, 10).forEach(d => { let date = '-', infoStr = ''; if(d.date) { const dObj = d.date.seconds ? new Date(d.date.seconds*1000) : d.date.toDate(); date = dObj.toLocaleDateString(); infoStr = d.duration || ''; } const btnDel = `<button class="btn-small btn-danger" style="margin:0 0 0 5px; padding:2px 6px;" onclick="window.deleteHistoryWorkout('${d.id}', true)">🗑️</button>`; hList.innerHTML += `<div class="history-row" style="grid-template-columns: 60px 1fr 30px auto;"><div>${date}</div><div style="overflow:hidden; text-overflow:ellipsis;">${d.routine}</div><div>${d.rpe === 'Suave' ? '🟢' : '🔴'}</div><div style="text-align:right;"><button class="btn-small btn-outline" onclick="viewWorkoutDetails('${d.id}', '${d.routine}', '${encodeURIComponent(JSON.stringify(d.details))}', '${encodeURIComponent(d.note||"")}', '${infoStr}')">Ver</button>${btnDel}</div></div>`; }); const st = freshU.stats || {}; document.getElementById('coach-stats-text').innerHTML = `<div class="stat-pill"><b>${st.workouts||0}</b><span>ENTRENOS</span></div><div class="stat-pill"><b>${(st.totalKg/1000||0).toFixed(1)}t</b><span>CARGA</span></div><div class="stat-pill"><b>${st.totalReps||0}</b><span>REPS</span></div>`; if(freshU.weightHistory) { fixCoachChart('coachWeightChart'); injectChartFilter('coachWeightChart', 'window.updateWeightChart'); coachChart = renderFilteredChart('coachWeightChart', coachChart, freshU.weightHistory, 'weight', '#ff3333', 90); } };
 window.toggleUserFeature = async (field, isActive) => { if(!selectedUserCoach || !selectedUserObj) return; selectedUserObj[field] = isActive; const toggleMap = { 'showBio': 'coach-view-bio', 'showSkinfolds': 'coach-view-skinfolds', 'showMeasurements': 'coach-view-measures' }; if(toggleMap[field]) { const el = document.getElementById(toggleMap[field]); if(el) isActive ? el.classList.remove('hidden') : el.classList.add('hidden'); } if(field === 'showPhotos') { const pCard = document.getElementById('coach-view-photos'); if(pCard) isActive ? pCard.classList.remove('hidden') : pCard.classList.add('hidden'); } try { await updateDoc(doc(db, "users", selectedUserCoach), { [field]: isActive }); console.log(`Updated ${field} to ${isActive}`); } catch (e) { console.error("Error updating toggle:", e); alert("Error al guardar ajuste."); const chk = document.querySelector(`input[onchange*="${field}"]`); if(chk) chk.checked = !isActive; } };
 window.assignRoutine = async () => { const sel = document.getElementById('coach-routine-select'); const rid = sel.value; if(!rid || !selectedUserCoach) return alert("Selecciona una rutina"); try { await updateDoc(doc(db, "routines", rid), { assignedTo: arrayUnion(selectedUserCoach) }); await updateDoc(doc(db, "users", selectedUserCoach), { routineOrder: arrayUnion(rid) }); alert("✅ Rutina enviada."); window.openCoachView(selectedUserCoach, selectedUserObj); } catch(e) { alert(e.message); } };
 window.unassignRoutine = async (rid) => { if(!confirm("¿Quitar esta rutina del atleta?")) return; try { await updateDoc(doc(db, "routines", rid), { assignedTo: arrayRemove(selectedUserCoach) }); await updateDoc(doc(db, "users", selectedUserCoach), { routineOrder: arrayRemove(rid) }); alert("🗑️ Rutina retirada."); window.openCoachView(selectedUserCoach, selectedUserObj); } catch(e) { alert(e.message); } };
