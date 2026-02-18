@@ -4,36 +4,7 @@ import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, onSnapshot, q
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 import { EXERCISES } from './data.js';
 
-console.log("⚡ FIT DATA: App v13.0 (Performance Edition)...");
-
-// --- NEW: SERVICE WORKER INJECTION (Offline Capability) ---
-// Generamos el SW dinámicamente para evitar crear un archivo sw.js separado manualmente.
-if ('serviceWorker' in navigator) {
-    const swCode = `
-    const CACHE_NAME = 'fit-data-v1';
-    const ASSETS = ['/', '/index.html', '/style.css', '/data.js', '/logo.png'];
-    self.addEventListener('install', (e) => e.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())));
-    self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
-    self.addEventListener('fetch', (e) => {
-        e.respondWith(
-            caches.match(e.request).then((resp) => {
-                return resp || fetch(e.request).then((response) => {
-                    return caches.open(CACHE_NAME).then((cache) => {
-                        // Cachear peticiones GET exitosas (excluyendo API de Firestore para evitar datos viejos)
-                        if(e.request.method === 'GET' && !e.request.url.includes('firestore')) {
-                            cache.put(e.request, response.clone());
-                        }
-                        return response;
-                    });
-                });
-            })
-        );
-    });`;
-    const blob = new Blob([swCode], {type: 'text/javascript'});
-    navigator.serviceWorker.register(URL.createObjectURL(blob))
-        .then(() => console.log('SW Registrado: Modo Offline Listo 🟢'))
-        .catch(err => console.warn('SW Error:', err));
-}
+console.log("⚡ FIT DATA: App v12.7 (Telegram Toggle Position & Sync Fix)...");
 
 const firebaseConfig = {
   apiKey: "AIzaSyDW40Lg6QvBc3zaaA58konqsH3QtDrRmyM",
@@ -49,7 +20,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-// Persistencia defensiva
+// FIX: Persistencia defensiva
 try {
     enableIndexedDbPersistence(db).catch((err) => {
         if (err.code == 'failed-precondition') { console.warn('Persistencia offline desactivada (múltiples pestañas).'); }
@@ -82,17 +53,11 @@ let deferredPrompt = null;
 
 // Cache & Edit Variables
 let rankFilterTime = 'all';        
-let rankFilterGender = 'all';       
-let rankFilterCat = 'kg';           
+let rankFilterGender = 'all';      
+let rankFilterCat = 'kg';          
 let adminUsersCache = null; 
 let editingHistoryId = null; 
 let currentHistoryDetails = null; 
-
-// NEW: Virtual Scroll Variables (Render Limit)
-let currentFilteredExercises = [];
-let renderedExerciseCount = 0;
-const EXERCISE_BATCH_SIZE = 20;
-let exerciseObserver = null;
 
 // Global instances
 let chartInstance = null; let progressChart = null; let fatChartInstance = null; let bioChartInstance = null; let measureChartInstance = null; let coachFatChart = null; let coachBioChart = null; let coachMeasureChart = null; let radarChartInstance = null; let coachChart = null; let userRadarChart = null; let coachRadarChart = null;
@@ -138,6 +103,7 @@ if (isIos() && !isInStandaloneMode()) {
     if(container && iosHint) { container.classList.remove('hidden'); iosHint.classList.remove('hidden'); }
 }
 
+// --- TELEGRAM & UI INJECTION ---
 function injectTelegramUI() {
     const regForm = document.getElementById('register-form');
     const regEmail = document.getElementById('reg-email');
@@ -167,9 +133,6 @@ onAuthStateChanged(auth, async (user) => {
     if(user) {
         currentUser = user;
         try {
-            // NEW: Priorizar la carga visual (Pantalla Blanca Fix)
-            document.getElementById('loading-screen').classList.add('hidden'); // Ocultar loader inmediatamente si hay caché
-            
             const snap = await getDoc(doc(db,"users",user.uid));
             if(snap.exists()){
                 userData = snap.data();
@@ -184,25 +147,17 @@ onAuthStateChanged(auth, async (user) => {
                     if(!routinesSnap.empty) document.getElementById('notif-badge').style.display = 'block';
                 }
                 if(userData.approved){
+                    setTimeout(() => { document.getElementById('loading-screen').classList.add('hidden'); }, 1000); 
                     document.getElementById('main-header').classList.remove('hidden');
-                    // NEW: Lazy Load de rutinas para no bloquear render
-                    requestAnimationFrame(() => loadRoutines());
-                    
+                    loadRoutines();
                     const savedW = localStorage.getItem('fit_active_workout');
-                    if(savedW) { 
-                        activeWorkout = JSON.parse(savedW); 
-                        renderWorkout(); 
-                        switchTab('workout-view'); 
-                        startTimerMini(); 
-                        showToast("⚠️ Sesión recuperada");
-                    } else { 
-                        switchTab('routines-view'); 
-                    }
+                    if(savedW) { activeWorkout = JSON.parse(savedW); renderWorkout(); switchTab('workout-view'); startTimerMini(); } 
+                    else { switchTab('routines-view'); }
                 } else { alert("Cuenta en revisión."); signOut(auth); }
             }
         } catch(e) { console.log("Offline mode or error:", e); document.getElementById('loading-screen').classList.add('hidden'); }
     } else {
-        setTimeout(() => { document.getElementById('loading-screen').classList.add('hidden'); }, 500);
+        setTimeout(() => { document.getElementById('loading-screen').classList.add('hidden'); }, 1500);
         switchTab('auth-view');
         document.getElementById('main-header').classList.add('hidden');
         if(communityUnsubscribe) communityUnsubscribe();
@@ -242,7 +197,6 @@ document.body.addEventListener('click', initAudioEngine, {once:true});
 window.testSound = () => { playTickSound(false); setTimeout(() => playFinalAlarm(), 600); };
 window.enableNotifications = () => { if (!("Notification" in window)) return alert("Tu dispositivo no soporta notificaciones."); Notification.requestPermission().then((p) => { if (p === "granted") { if("vibrate" in navigator) navigator.vibrate([200]); new Notification("Fit Data", { body: "✅ Notificaciones listas.", icon: "logo.png" }); alert("✅ Vinculado."); } else alert("❌ Permiso denegado."); }); };
 
-// NEW: Enhanced Switch Tab (State Preservation)
 window.switchTab = (t) => {
     document.querySelectorAll('.view-container').forEach(e => e.classList.remove('active'));
     const target = document.getElementById(t);
@@ -252,25 +206,7 @@ window.switchTab = (t) => {
     if (t === 'ranking-view') document.getElementById('top-btn-ranking').classList.add('active');
     if (t === 'profile-view') { document.getElementById('top-btn-profile').classList.add('active'); window.loadProfile(); }
     if (t === 'admin-view' || t === 'coach-detail-view') { document.getElementById('top-btn-coach').classList.add('active'); }
-
-    // Logic for Resume Banner
-    checkResumeState(t);
 };
-
-// Función auxiliar para mostrar botón flotante de retorno
-function checkResumeState(currentTab) {
-    const existing = document.getElementById('resume-workout-pill');
-    if(existing) existing.remove();
-    
-    if (activeWorkout && currentTab !== 'workout-view') {
-        const pill = document.createElement('div');
-        pill.id = 'resume-workout-pill';
-        pill.style.cssText = "position:fixed; bottom:80px; right:20px; background:var(--accent-color); color:#000; padding:10px 20px; border-radius:50px; font-weight:bold; box-shadow:0 4px 15px rgba(0,0,0,0.5); z-index:999; animation: pulse 2s infinite; cursor:pointer; display:flex; align-items:center; gap:5px;";
-        pill.innerHTML = `<span>⚡ VOLVER AL ENTRENO</span>`;
-        pill.onclick = () => window.switchTab('workout-view');
-        document.body.appendChild(pill);
-    }
-}
 
 window.switchProfileSubTab = (tabName) => {
     document.querySelectorAll('.p-tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -435,117 +371,26 @@ async function loadRoutines() {
     });
 }
 
-window.openEditor = async (id = null) => { 
-    editingRoutineId = id; 
-    document.getElementById('editor-name').value = ''; 
-    document.getElementById('editor-title').innerText = id ? "EDITAR RUTINA" : "NUEVA RUTINA"; 
-    
-    if (id) { 
-        const docSnap = await getDoc(doc(db, "routines", id)); 
-        const r = docSnap.data(); 
-        document.getElementById('editor-name').value = r.name; 
-        currentRoutineSelections = r.exercises.map(ex => ({ n: ex.n || ex, s: ex.s || false, series: ex.series || 5, reps: ex.reps || "20-16-16-16-16" })); 
-    } else { 
-        currentRoutineSelections = []; 
-    } 
-    window.currentRoutineSelections = currentRoutineSelections; 
-    
-    // NEW: Trigger paginated render logic
-    currentFilteredExercises = [...EXERCISES].sort((a, b) => { 
-        const aSelected = currentRoutineSelections.some(x => x.n === a.n); 
-        const bSelected = currentRoutineSelections.some(x => x.n === b.n); 
-        if (aSelected && !bSelected) return -1; 
-        if (!aSelected && bSelected) return 1; 
-        return 0; 
-    });
-    
-    renderedExerciseCount = 0;
-    const c = document.getElementById('exercise-selector-list');
-    c.innerHTML = ''; // Reset DOM
-    renderNextBatch();
-    
-    renderSelectedSummary(); 
-    switchTab('editor-view'); 
-};
+window.openEditor = async (id = null) => { editingRoutineId = id; document.getElementById('editor-name').value = ''; document.getElementById('editor-title').innerText = id ? "EDITAR RUTINA" : "NUEVA RUTINA"; if (id) { const docSnap = await getDoc(doc(db, "routines", id)); const r = docSnap.data(); document.getElementById('editor-name').value = r.name; currentRoutineSelections = r.exercises.map(ex => ({ n: ex.n || ex, s: ex.s || false, series: ex.series || 5, reps: ex.reps || "20-16-16-16-16" })); } else { currentRoutineSelections = []; } window.currentRoutineSelections = currentRoutineSelections; renderExercises(EXERCISES); renderSelectedSummary(); switchTab('editor-view'); };
+window.filterExercises = (t) => { const cleanSearch = normalizeText(t); const filtered = EXERCISES.filter(e => { const nameMatch = normalizeText(e.n).includes(cleanSearch); const muscleMatch = e.m ? normalizeText(e.m).includes(cleanSearch) : false; return nameMatch || muscleMatch; }); renderExercises(filtered); };
 
-window.filterExercises = (t) => { 
-    const cleanSearch = normalizeText(t); 
-    const filtered = EXERCISES.filter(e => { 
-        const nameMatch = normalizeText(e.n).includes(cleanSearch); 
-        const muscleMatch = e.m ? normalizeText(e.m).includes(cleanSearch) : false; 
-        return nameMatch || muscleMatch; 
-    }); 
-    
-    currentFilteredExercises = filtered;
-    renderedExerciseCount = 0;
-    document.getElementById('exercise-selector-list').innerHTML = ''; // Clear DOM
-    renderNextBatch();
-};
-
-// --- NEW: VIRTUAL SCROLL / PAGINATION IMPLEMENTATION (Render Limit) ---
-window.renderNextBatch = () => {
-    const c = document.getElementById('exercise-selector-list');
-    const fragment = document.createDocumentFragment();
-    const nextBatch = currentFilteredExercises.slice(renderedExerciseCount, renderedExerciseCount + EXERCISE_BATCH_SIZE);
-    
-    if (nextBatch.length === 0) return;
-
-    nextBatch.forEach(e => {
-        const d = document.createElement('div'); 
-        const selectedIndex = currentRoutineSelections.findIndex(x => x.n === e.n); 
-        const isSelected = selectedIndex > -1; 
-        const obj = isSelected ? currentRoutineSelections[selectedIndex] : null; 
-        d.id = `ex-card-${normalizeText(e.n)}`; 
-        d.className = 'ex-select-item';
-
+function renderExercises(l) {
+    const c = document.getElementById('exercise-selector-list'); c.innerHTML = '';
+    const sortedList = [...l].sort((a, b) => { const aSelected = currentRoutineSelections.some(x => x.n === a.n); const bSelected = currentRoutineSelections.some(x => x.n === b.n); if (aSelected && !bSelected) return -1; if (!aSelected && bSelected) return 1; return 0; });
+    sortedList.forEach(e => {
+        const d = document.createElement('div'); const selectedIndex = currentRoutineSelections.findIndex(x => x.n === e.n); const isSelected = selectedIndex > -1; const obj = isSelected ? currentRoutineSelections[selectedIndex] : null; d.id = `ex-card-${normalizeText(e.n)}`; d.className = 'ex-select-item';
         if (isSelected) {
-            d.classList.add('selected-red-active'); 
-            d.style.cssText = "background: rgba(50, 10, 10, 0.95); border-left: 4px solid var(--accent-color); border: 1px solid var(--accent-color); padding: 10px; margin-bottom: 5px; border-radius: 8px; flex-direction:column; align-items: stretch;";
+            d.classList.add('selected-red-active'); d.style.cssText = "background: rgba(50, 10, 10, 0.95); border-left: 4px solid var(--accent-color); border: 1px solid var(--accent-color); padding: 10px; margin-bottom: 5px; border-radius: 8px; flex-direction:column; align-items: stretch;";
             const linkActiveStyle = obj.s ? "color: var(--accent-color); text-shadow: 0 0 5px var(--accent-color);" : "color:rgba(255,255,255,0.2);";
             d.innerHTML = `<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;"><div style="display:flex; align-items:center; gap:10px;"><img src="${e.img}" onerror="this.src='logo.png'" style="width:40px; height:40px; border-radius:4px; object-fit:cover;"><span style="font-weight:bold; color:white;">${e.n}</span></div><b class="btn-remove-ex" onclick="event.stopPropagation(); removeSelection('${obj.n}')" style="cursor:pointer; color:#ff5555; font-size:1.2rem; padding:5px;">✕</b></div><div class="summary-inputs" style="display:flex; gap:8px; align-items:center; width:100%;"><input type="number" value="${obj.series || 5}" oninput="window.updateSelectionData(${selectedIndex}, 'series', this.value)" onclick="event.stopPropagation()" placeholder="Ser" style="width:60px; text-align:center; padding:8px; background:#000; border:1px solid #444; color:white; border-radius:4px;"><span style="color:#aaa;">x</span><input type="text" value="${obj.reps || '20-16-16-16-16'}" onclick="event.stopPropagation()" style="flex:1; padding:8px; background:#000; border:1px solid #444; color:white; border-radius:4px;" oninput="window.updateSelectionData(${selectedIndex}, 'reps', this.value)" placeholder="Reps"><span style="font-size:1.8rem; cursor:pointer; margin-left:5px; ${linkActiveStyle}" onclick="event.stopPropagation(); toggleSuperset(${selectedIndex})" title="Superserie">🔗</span></div>`;
             d.onclick = null; 
         } else {
             d.innerHTML = `<img src="${e.img}" onerror="this.src='logo.png'"><span>${e.n}</span>`;
-            d.onclick = () => { currentRoutineSelections.push({ n: e.n, s: false, series: 5, reps: "20-16-16-16-16" }); window.openEditor(editingRoutineId); };
+            d.onclick = () => { currentRoutineSelections.push({ n: e.n, s: false, series: 5, reps: "20-16-16-16-16" }); renderExercises(sortedList); renderSelectedSummary(); };
         }
-        fragment.appendChild(d);
+        c.appendChild(d);
     });
-
-    // Remove old sentinel
-    const oldSentinel = document.getElementById('scroll-sentinel');
-    if(oldSentinel) oldSentinel.remove();
-
-    c.appendChild(fragment);
-    renderedExerciseCount += nextBatch.length;
-
-    // Add new sentinel if more data exists
-    if (renderedExerciseCount < currentFilteredExercises.length) {
-        const sentinel = document.createElement('div');
-        sentinel.id = 'scroll-sentinel';
-        sentinel.style.height = '20px';
-        sentinel.innerText = '...';
-        c.appendChild(sentinel);
-        setupObserver(sentinel);
-    }
-};
-
-function setupObserver(target) {
-    if (exerciseObserver) exerciseObserver.disconnect();
-    exerciseObserver = new IntersectionObserver((entries) => {
-        if(entries[0].isIntersecting) {
-            renderNextBatch();
-        }
-    }, { root: document.getElementById('exercise-selector-list'), threshold: 0.1 });
-    exerciseObserver.observe(target);
 }
-
-// Old renderExercises is removed/replaced by virtual logic above
-function renderExercises(l) {
-   // Legacy placeholder - functionality moved to openEditor and renderNextBatch
-   // to ensure pagination works correctly.
-   console.log("Using Virtual Render");
-}
-// ------------------------------------------------------------------
 
 window.renderSelectedSummary = () => {
     const div = document.getElementById('selected-summary'); div.innerHTML = ''; 
@@ -558,7 +403,7 @@ window.renderSelectedSummary = () => {
 };
 
 window.updateSelectionData = (idx, field, val) => { if(currentRoutineSelections[idx]) { currentRoutineSelections[idx][field] = field === 'series' ? (parseInt(val)||0) : val; } };
-window.toggleSuperset = (idx) => { if (idx < currentRoutineSelections.length - 1) { currentRoutineSelections[idx].s = !currentRoutineSelections[idx].s; window.openEditor(editingRoutineId); } else { alert("No puedes hacer superserie con el último ejercicio."); } };
+window.toggleSuperset = (idx) => { if (idx < currentRoutineSelections.length - 1) { currentRoutineSelections[idx].s = !currentRoutineSelections[idx].s; renderExercises(EXERCISES); renderSelectedSummary(); } else { alert("No puedes hacer superserie con el último ejercicio."); } };
 window.removeSelection = (name) => { currentRoutineSelections = currentRoutineSelections.filter(x => x.n !== name); renderSelectedSummary(); window.filterExercises(document.getElementById('ex-search').value); }
 window.saveRoutine = async () => { const n = document.getElementById('editor-name').value; const s = window.currentRoutineSelections; if(!n || s.length === 0) return alert("❌ Faltan datos"); const btn = document.getElementById('btn-save-routine'); btn.innerText = "💾 GUARDANDO..."; let initialAssignments = []; if (userData.role !== 'admin') { initialAssignments.push(currentUser.uid); } try { const data = { uid: currentUser.uid, name: n, exercises: s, createdAt: serverTimestamp(), assignedTo: initialAssignments }; if(editingRoutineId) { await updateDoc(doc(db, "routines", editingRoutineId), { name: n, exercises: s }); } else { await addDoc(collection(db, "routines"), data); } alert("✅ Guardado"); switchTab('routines-view'); } catch(e) { alert("Error: " + e.message); } finally { btn.innerText = "GUARDAR"; } };
 window.cloneRoutine = async (id) => { if(!confirm("¿Deseas clonar esta rutina para editarla?")) return; try { const docRef = doc(db, "routines", id); const docSnap = await getDoc(docRef); if (!docSnap.exists()) return alert("Error: No existe."); const originalData = docSnap.data(); const newName = prompt("Nombre copia:", `${originalData.name} (Copia)`); if (!newName) return; const copyData = { ...originalData, name: newName, uid: currentUser.uid, createdAt: serverTimestamp(), assignedTo: [] }; await addDoc(collection(db, "routines"), copyData); alert(`✅ Clonada. Ahora puedes editar "${newName}".`); window.loadAdminLibrary(); } catch (e) { alert("Error: " + e.message); } };
@@ -627,18 +472,9 @@ window.savePhotoReminder = async () => { const d = document.getElementById('phot
 window.addWeightEntry = async () => { const wStr = prompt("Introduce tu peso (kg):"); if(!wStr) return; const w = parseFloat(wStr.replace(',','.')); if(isNaN(w)) return alert("Número inválido"); const newEntry = { weight: w, date: new Date() }; try { await updateDoc(doc(db,"users",currentUser.uid), { weightHistory: arrayUnion(newEntry) }); if (!userData.weightHistory) userData.weightHistory = []; userData.weightHistory.push({ weight: w, date: { seconds: Date.now() / 1000 } }); window.loadProfile(); alert("✅ Peso Guardado"); } catch(e) { alert("Error al guardar: " + e.message); } };
 
 function saveLocalWorkout() { localStorage.setItem('fit_active_workout', JSON.stringify(activeWorkout)); }
-window.cancelWorkout = () => { if(confirm("⚠ ¿SEGURO QUE QUIERES CANCELAR?\nSe perderán los datos de este entrenamiento.")) { activeWorkout = null; localStorage.removeItem('fit_active_workout'); if(durationInt) clearInterval(durationInt); switchTab('routines-view'); const p = document.getElementById('resume-workout-pill'); if(p) p.remove(); } };
+window.cancelWorkout = () => { if(confirm("⚠ ¿SEGURO QUE QUIERES CANCELAR?\nSe perderán los datos de este entrenamiento.")) { activeWorkout = null; localStorage.removeItem('fit_active_workout'); if(durationInt) clearInterval(durationInt); switchTab('routines-view'); } };
 
-// NEW: Start Workout SAFE-MODE (State Persistence)
 window.startWorkout = async (rid) => {
-    // 1. Check if workout exists
-    if (activeWorkout) {
-        if (confirm(`⚠ YA TIENES UN ENTRENO ACTIVO: "${activeWorkout.name}"\n\n¿Quieres reanudarlo?\n(Cancelar para iniciar uno nuevo y borrar el actual)`)) {
-            switchTab('workout-view');
-            return;
-        }
-    }
-
     if(document.getElementById('cfg-wake').checked && 'wakeLock' in navigator) { try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e) { console.log("WakeLock error", e); } }
     try {
         const snap = await getDoc(doc(db,"routines",rid)); const r = snap.data();
@@ -663,15 +499,21 @@ window.changeRankFilter = (type, val) => {
     window.loadRankingView();
 };
 
+// --- OPTIMIZACIÓN: CACHÉ DIARIO (RESET 00:00) ---
 window.loadRankingView = async () => {
     switchTab('ranking-view'); 
     const list = document.getElementById('ranking-list'); 
     list.innerHTML = '<div style="text-align:center; margin-top:50px; color:#666;">⏳ Verificando datos...</div>';
 
     try {
+        // 1. Generamos una "Firma Única" para el filtro actual
+        // Ejemplo: "rank_cache_week_male_kg"
         const cacheKey = `rank_cache_${rankFilterTime}_${rankFilterGender}_${rankFilterCat}`;
+        
+        // 2. Obtenemos la fecha de hoy (String simple: "Tue Oct 27 2023")
         const todayStr = new Date().toDateString();
 
+        // 3. Revisamos si existe una copia guardada en el móvil
         const cachedRaw = localStorage.getItem(cacheKey);
         
         let useCache = false;
@@ -679,6 +521,7 @@ window.loadRankingView = async () => {
 
         if (cachedRaw) {
             const cachedObj = JSON.parse(cachedRaw);
+            // LA REGLA DE ORO: ¿Es la copia de hoy?
             if (cachedObj.date === todayStr) {
                 console.log("⚡ USANDO CACHÉ LOCAL (0 Lecturas Firebase)");
                 rankingData = cachedObj.data;
@@ -686,12 +529,14 @@ window.loadRankingView = async () => {
             }
         }
 
+        // 4. Si NO hay caché válida (es la primera vez hoy), descargamos de Firebase
         if (!useCache) {
             console.log("☁️ DESCARGANDO NUEVO RANKING (Coste Firebase)");
             list.innerHTML = '<div style="text-align:center; margin-top:50px; color:var(--accent-color);">↻ Actualizando tabla diaria...</div>';
             
             let orderByField = "", collectionField = "";
             
+            // Lógica de selección de campos (Igual que antes)
             if (rankFilterCat === 'kg') collectionField = "kg"; 
             else if (rankFilterCat === 'workouts') collectionField = "workouts"; 
             else if (rankFilterCat === 'reps') collectionField = "reps"; 
@@ -726,6 +571,7 @@ window.loadRankingView = async () => {
                 return; 
             }
 
+            // Procesamos los datos para guardarlos limpios (sin basura de Firebase)
             rankingData = [];
             snap.forEach(d => {
                 const u = d.data();
@@ -739,6 +585,7 @@ window.loadRankingView = async () => {
                     rawValue = (u[rootKey] && u[rootKey][subKey]) ? u[rootKey][subKey] : 0; 
                 }
                 
+                // Guardamos solo lo necesario para pintar
                 rankingData.push({
                     id: d.id,
                     name: u.name,
@@ -748,18 +595,21 @@ window.loadRankingView = async () => {
                 });
             });
 
+            // 5. GUARDAMOS EN MEMORIA DEL TELÉFONO (LocalStorage)
             try {
                 const cacheObject = { date: todayStr, data: rankingData };
                 localStorage.setItem(cacheKey, JSON.stringify(cacheObject));
             } catch (err) { console.warn("Memoria llena, no se pudo cachear"); }
         }
 
+        // 6. RENDERIZADO (Pintar la lista desde rankingData)
         list.innerHTML = "";
         let rank = 1;
         
         rankingData.forEach(u => {
             const isMe = u.id === currentUser.uid;
             
+            // Formateo del valor
             let displayValue = u.value; 
             if(rankFilterCat === 'kg') displayValue = (u.value / 1000).toFixed(1) + 't'; 
             else if(rankFilterCat === 'prs') displayValue = u.value + ' 🏆'; 
@@ -791,6 +641,7 @@ window.loadRankingView = async () => {
             rank++;
         });
 
+        // Aviso visual si es caché
         if(useCache) {
             const advice = document.createElement('div');
             advice.className = 'tip-box';
@@ -810,6 +661,7 @@ window.loadRankingView = async () => {
 window.initSwap = (idx) => { swapTargetIndex = idx; const currentEx = activeWorkout.exs[idx]; const muscle = currentEx.mInfo.main; const list = document.getElementById('swap-list'); list.innerHTML = ''; const alternatives = EXERCISES.filter(e => getMuscleInfoByGroup(e.m).main === muscle && e.n !== currentEx.n); if(alternatives.length === 0) list.innerHTML = '<div style="padding:10px;">No hay alternativas directas.</div>'; else alternatives.forEach(alt => { const d = document.createElement('div'); d.style.padding = "10px"; d.style.borderBottom = "1px solid #333"; d.style.cursor = "pointer"; d.innerHTML = `<b>${alt.n}</b>`; d.onclick = () => window.performSwap(alt.n); list.appendChild(d); }); window.openModal('modal-swap'); };
 window.performSwap = (newName) => { if(swapTargetIndex === null) return; const data = getExerciseData(newName); const currentSets = activeWorkout.exs[swapTargetIndex].sets.map(s => ({...s, prev:'-', d: false})); activeWorkout.exs[swapTargetIndex].n = newName; activeWorkout.exs[swapTargetIndex].img = data.img; activeWorkout.exs[swapTargetIndex].video = data.v; activeWorkout.exs[swapTargetIndex].sets = currentSets; saveLocalWorkout(); renderWorkout(); window.closeModal('modal-swap'); };
 
+// --- RENDER WORKOUT (Clean Dropsets + Delete Btn) ---
 function renderWorkout() {
     const c = document.getElementById('workout-exercises'); c.innerHTML = ''; document.getElementById('workout-title').innerText = activeWorkout.name;
     activeWorkout.exs.forEach((e, i) => {
@@ -828,6 +680,7 @@ function renderWorkout() {
             const isDropClass = s.isDrop ? 'is-dropset' : ''; 
             const displayNum = s.numDisplay || (j + 1);
             
+            // Logic: Drop or Delete
             let dropActionBtn = '';
             if (!s.d) { 
                 if (s.isDrop) {
@@ -936,12 +789,13 @@ function showToast(msg) {
 }
 function createToastContainer() { const div = document.createElement('div'); div.id = 'toast-container'; document.body.appendChild(div); return div; }
 
+// --- LOGICA DE COMPRESION Y LIMPIEZA ---
 async function compressAndCleanupWorkouts(uid) {
     try {
         const q = query(collection(db, "workouts"), where("uid", "==", uid), orderBy("date", "desc"));
         const snapshot = await getDocs(q);
         const docs = snapshot.docs;
-        const KEEP_LIMIT = 30; 
+        const KEEP_LIMIT = 30; // 🛡️ SEGURO: Guarda 30 entrenos completos para UX
 
         if (docs.length <= KEEP_LIMIT) return; 
 
@@ -998,6 +852,7 @@ window.runGlobalMigration = async () => {
         btn.innerText = originalText; btn.disabled = false;
     }
 };
+// ---------------------------------------
 
 window.finishWorkout = async (rpeVal) => {
     try {
@@ -1012,6 +867,7 @@ window.finishWorkout = async (rpeVal) => {
                 const r = parseInt(set.r) || 0; 
                 const w = parseFloat(set.w) || 0; 
                 
+                // VALIDACIÓN: Chequeamos si hay peso 0 en serie completada
                 if (w === 0) missingWeights = true;
 
                 totalSets++; totalReps += r; totalKg += (r * w);
@@ -1023,10 +879,13 @@ window.finishWorkout = async (rpeVal) => {
 
         if (cleanLog.length === 0) { alert("No hay series completadas."); return; }
 
+        // --- ALERTA DE SEGURIDAD (PESOS VACÍOS) ---
         if(missingWeights) {
             if(!confirm("⚠️ ATENCIÓN:\n\nHay series marcadas como hechas pero con 0 kg.\n\n¿Estás seguro de que quieres terminar el entreno así?")) return;
         }
+        // -------------------------------------------
 
+        // --- CÁLCULO DEL TIEMPO (CORREGIDO HORAS) ---
         const startTime = activeWorkout.startTime || Date.now();
         const durationMs = Date.now() - startTime;
         
@@ -1035,8 +894,10 @@ window.finishWorkout = async (rpeVal) => {
         const s = Math.floor((durationMs % 60000) / 1000);
         
         const durationStr = h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
+        // ---------------------------------------------
 
         const workoutNum = (userData.stats?.workouts || 0) + 1;
+        const volumeDisplay = totalKg >= 1000 ? (totalKg / 1000).toFixed(2) + "t" : totalKg.toFixed(0) + "kg";
         const now = new Date(); const currentMonthKey = `${now.getFullYear()}_${now.getMonth()}`; const currentYearKey = `${now.getFullYear()}`; const currentWeekKey = getWeekNumber(now); 
         
         await addDoc(collection(db, "workouts"), { 
@@ -1061,15 +922,11 @@ window.finishWorkout = async (rpeVal) => {
         for (const [muscle, count] of Object.entries(muscleCounts)) { updates[`muscleStats.${muscle}`] = increment(count); }
         await updateDoc(doc(db, "users", currentUser.uid), updates);
         
+        // --- LIMPIEZA AUTO ---
         compressAndCleanupWorkouts(currentUser.uid); 
         
         showToast(`🏆 ¡Entreno nº ${workoutNum} completado! Tiempo: ${durationStr}`);
-        activeWorkout = null; 
-        localStorage.removeItem('fit_active_workout'); 
-        if (durationInt) clearInterval(durationInt); 
-        if (wakeLock) { await wakeLock.release(); wakeLock = null; } 
-        const pill = document.getElementById('resume-workout-pill'); if(pill) pill.remove();
-        window.switchTab('routines-view');
+        localStorage.removeItem('fit_active_workout'); if (durationInt) clearInterval(durationInt); if (wakeLock) { await wakeLock.release(); wakeLock = null; } window.switchTab('routines-view');
     } catch (error) { console.error("Error finish:", error); alert("Error crítico al guardar. Revisa tu conexión."); }
 };
 
@@ -1107,11 +964,13 @@ window.renderProgressChart = (exName) => {
     progressChart = new Chart(ctx, { type: 'line', data: { labels: labels, datasets: [ { label: 'Volumen (Kg)', data: volData, borderColor: '#00ff88', backgroundColor: 'rgba(0, 255, 136, 0.1)', yAxisID: 'y', tension: 0.4, fill: true, pointRadius: 3 }, { label: '1RM Est.', data: rmData, borderColor: '#ffaa00', yAxisID: 'y1', tension: 0.3, pointRadius: 4 }, { label: 'Peso Máx', data: prData, borderColor: '#ff3333', borderDash: [5, 5], yAxisID: 'y1', tension: 0.3, pointRadius: 2 } ] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { type: 'linear', display: true, position: 'left', grid: { color: '#333' } }, y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false } }, x: { ticks: { color: '#888', maxRotation: 45, minRotation: 0 } } } } }); 
 };
 
+// --- ADMIN / COACH LOGIC ---
 window.toggleAdminMode = (mode) => { document.getElementById('tab-users').classList.toggle('active', mode==='users'); document.getElementById('tab-lib').classList.toggle('active', mode==='lib'); document.getElementById('tab-plans').classList.toggle('active', mode==='plans'); document.getElementById('admin-users-card').classList.toggle('hidden', mode!=='users'); document.getElementById('admin-lib-card').classList.toggle('hidden', mode!=='lib'); document.getElementById('admin-plans-card').classList.toggle('hidden', mode!=='plans'); if(mode==='users') window.loadAdminUsers(); if(mode==='lib') window.loadAdminLibrary(); if(mode==='plans') window.loadAdminPlans(); };
 
 window.loadAdminUsers = async (forceRefresh = false) => {
     const l = document.getElementById('admin-list');
     
+    // CACHÉ INTELIGENTE
     if (adminUsersCache && !forceRefresh) {
         renderAdminList(adminUsersCache);
         return; 
@@ -1181,14 +1040,17 @@ window.loadAdminLibrary = async () => {
     } catch (e) { l.innerHTML = 'Error.'; }
 };
 
+// --- NUEVA VISTA DETALLADA DE RUTINA (COACH) ---
 window.viewRoutineFullDetails = async (rid) => {
     try {
         const docSnap = await getDoc(doc(db, "routines", rid));
         if(!docSnap.exists()) return alert("Rutina no encontrada");
         const r = docSnap.data();
 
+        // Obtener nombres de atletas asignados (usando caché si existe)
         let assignedNamesHtml = '<div style="color:#666; font-size:0.8rem;">Ningún atleta asignado.</div>';
         if(r.assignedTo && r.assignedTo.length > 0) {
+            // Si no tenemos caché de usuarios, lo intentamos cargar, si no, mostramos IDs
             let names = [];
             if(adminUsersCache) {
                 names = r.assignedTo.map(uid => {
@@ -1196,6 +1058,7 @@ window.viewRoutineFullDetails = async (rid) => {
                     return found ? found.name : "Usuario desconocido";
                 });
             } else {
+                // Fallback rápido si no hay caché
                 names = r.assignedTo.map(() => "Usuario (ID)"); 
             }
             assignedNamesHtml = `<div style="display:flex; flex-wrap:wrap; gap:5px;">${names.map(n => `<span class="badge green">${n}</span>`).join('')}</div>`;
@@ -1220,6 +1083,7 @@ window.viewRoutineFullDetails = async (rid) => {
     } catch(e) { console.error(e); alert("Error cargando detalles"); }
 };
 
+// FIX: Función completamente reparada para mostrar tarjetas clickeables y selección visual
 window.initMassAssignRoutine = async (rid) => {
     assignMode = 'routine'; 
     selectedRoutineForMassAssign = rid; 
@@ -1239,11 +1103,14 @@ window.initMassAssignRoutine = async (rid) => {
             if (u.role === 'athlete') { 
                 const div = document.createElement('div'); 
                 div.className = "selector-item user-select-card";
+                // Lógica de click visual para evitar problemas táctiles
                 div.onclick = (e) => {
+                    // Si no se hizo click directamente en el input, cambiamos el input manualmente
                     if (e.target.type !== 'checkbox') {
                         const cb = div.querySelector('input');
                         cb.checked = !cb.checked;
                     }
+                    // Aplicar estilos visuales (Card Roja)
                     if (div.querySelector('input').checked) {
                          div.style.backgroundColor = 'rgba(255, 51, 51, 0.2)';
                          div.style.border = '1px solid var(--accent-color)';
@@ -1279,6 +1146,7 @@ window.viewPlanContent = async (planName, planId) => { const snap = await getDoc
 window.createPlan = async () => { const name = document.getElementById('new-plan-name').value; const checks = document.querySelectorAll('.plan-check:checked'); if(!name || checks.length === 0) return alert("Pon un nombre y selecciona rutinas"); await addDoc(collection(db, "plans"), { name: name, routines: Array.from(checks).map(c => c.value), createdBy: currentUser.uid }); alert("Plan Creado"); document.getElementById('new-plan-name').value = ''; window.loadAdminPlans(); };
 window.deletePlan = async (id) => { if(confirm("¿Borrar plan?")) { await deleteDoc(doc(db, "plans", id)); window.loadAdminPlans(); } };
 
+// FIX: Reparada también la asignación de planes para mantener consistencia UI
 window.openAssignPlanModal = async (planId) => { 
     assignMode = 'plan'; 
     selectedPlanForMassAssign = planId; 
@@ -1296,6 +1164,7 @@ window.openAssignPlanModal = async (planId) => {
             if (u.role === 'athlete') { 
                 const div = document.createElement('div'); 
                 div.className = "selector-item user-select-card"; 
+                // Misma lógica visual
                 div.onclick = (e) => {
                     if (e.target.type !== 'checkbox') {
                         const cb = div.querySelector('input');
@@ -1356,14 +1225,17 @@ window.distributePlan = async () => {
     } 
 };
 
+// --- LOGICA DE VISUALIZACIÓN Y EDICIÓN DE HISTORIAL (MVP) ---
 window.viewWorkoutDetails = (wId, routineName, detailsStr, noteStr, timeStr = "") => { 
     try { 
+        // 1. Guardar estado global para edición
         editingHistoryId = wId;
         currentHistoryDetails = JSON.parse(decodeURIComponent(detailsStr));
         const note = decodeURIComponent(noteStr || ""); 
         
         let timeHtml = timeStr ? `<div style="text-align:center; color:#666; font-size:0.75rem; margin-bottom:10px;">Finalizado: ${timeStr}</div>` : "";
         
+        // 2. Renderizar contenido (Modo Lectura por defecto)
         let html = `<br>
             ${timeHtml}<br>
             <div class="detail-note-box">📝 ${note || "Sin notas."}</div><br>
@@ -1386,6 +1258,7 @@ function renderHistoryHTML(details) {
     let html = '';
     details.forEach((ex, exIdx) => { 
         const name = ex.n || ex; const sets = ex.s || []; 
+        // --- AQUÍ AÑADIMOS LA NOTA DEL EJERCICIO ---
         const exNoteHtml = ex.note ? `<div style="font-size:0.75rem; color:#aaa; font-style:italic; margin-top:5px; padding:4px; border-left:2px solid #555; background:#111;">📝 ${ex.note}</div>` : '';
         
         html += `<div class="detail-exercise-card"><div class="detail-exercise-title">${name}</div>${exNoteHtml}<div class="detail-sets-grid">`; 
@@ -1393,8 +1266,10 @@ function renderHistoryHTML(details) {
         if (sets.length > 0) { 
             sets.forEach((s, i) => { 
                 const num = s.numDisplay || (i + 1); const w = s.w || 0; const r = s.r || 0; 
+                // SIN GOTA 💧
                 const dropStyle = s.isDrop ? 'border: 1px solid var(--warning-color); background: rgba(255, 170, 0, 0.15);' : ''; 
                 
+                // DATA ATTRIBUTES para poder leer los valores al editar
                 html += `<div class="detail-set-badge history-set-item" style="${dropStyle}" data-ex="${exIdx}" data-set="${i}"><br>
                     <span class="detail-set-num">#${num}</span><br>
                     <span class="set-view"><b>${r}</b> <span style="color:#666">x</span> ${w}k</span><br>
@@ -1413,6 +1288,7 @@ window.enableHistoryEdit = () => {
         const setIdx = item.getAttribute('data-set');
         const setObj = currentHistoryDetails[exIdx].s[setIdx];
         
+        // Reemplazar texto por inputs
         item.innerHTML = `<br>
             <div style="display:flex; gap:5px; align-items:center;"><br>
                 <input type="number" class="hist-edit-reps" value="${setObj.r}" style="width:40px; padding:2px; margin:0; text-align:center; background:#000; border:1px solid #444;"><br>
@@ -1502,11 +1378,15 @@ window.openCoachView = async (uid, u) => {
     document.getElementById('coach-toggle-videos').checked = !!freshU.showVideos;
     const togglePhotos = document.getElementById('coach-toggle-photos'); if (togglePhotos) { togglePhotos.checked = freshU.showPhotos !== false; }
 
+    // --- FIX: TELEGRAM TOGGLE LOGIC ---
+    // Remove old one if exists to prevent duplicates
     const existingTg = document.getElementById('coach-telegram-row');
     if(existingTg) existingTg.remove();
 
+    // Find the video toggle row to inject after it
     const videoToggleEl = document.getElementById('coach-toggle-videos');
     if(videoToggleEl) {
+         // Assuming structure is inside a flex row div, getting parent
          const videoRow = videoToggleEl.closest('div'); 
          
          const tgRow = document.createElement('div');
@@ -1520,12 +1400,15 @@ window.openCoachView = async (uid, u) => {
             </label>
          `;
          
+         // Insert after video row
          if(videoRow && videoRow.parentNode) {
             videoRow.parentNode.insertBefore(tgRow, videoRow.nextSibling);
          }
          
+         // FORCE CHECKED STATE (Critical Fix)
          document.getElementById('coach-toggle-telegram').checked = !!freshU.allowTelegram;
     }
+    // ----------------------------------
 
     const dietSel = document.getElementById('coach-diet-select'); dietSel.innerHTML = '<option value="">-- Sin Dieta --</option>';
     AVAILABLE_DIETS.forEach(d => { const opt = new Option(d.name, d.file); if(freshU.dietFile === d.file) opt.selected = true; dietSel.appendChild(opt); });
@@ -1559,11 +1442,17 @@ window.openCoachView = async (uid, u) => {
     });
 };
 
+// ==========================================================
+// ⚡ COACH ACTIONS & TOGGLE FIX (CRITICAL)
+// ==========================================================
+
 window.toggleUserFeature = async (field, isActive) => {
     if(!selectedUserCoach || !selectedUserObj) return;
 
+    // 1. UI Optimista (Responsive)
     selectedUserObj[field] = isActive;
 
+    // 2. Toggle visual inmediato
     const toggleMap = {
         'showBio': 'coach-view-bio',
         'showSkinfolds': 'coach-view-skinfolds',
@@ -1584,6 +1473,7 @@ window.toggleUserFeature = async (field, isActive) => {
     } catch (e) {
         console.error("Error updating toggle:", e);
         alert("Error al guardar ajuste.");
+        // Revertir en caso de fallo
         const chk = document.querySelector(`input[onchange*="${field}"]`);
         if(chk) chk.checked = !isActive;
     }
@@ -1652,6 +1542,7 @@ window.deleteUser = async () => {
 window.goToCreateRoutine = () => {
     window.openEditor();
 };
+// ==========================================================
 
 document.getElementById('btn-register').onclick=async()=>{
     const secretCode = document.getElementById('reg-code').value; const tgUser = document.getElementById('reg-telegram')?.value || ""; 
