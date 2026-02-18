@@ -4,15 +4,18 @@ import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, onSnapshot, q
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 import { EXERCISES } from './data.js';
 
-// --- CAZADOR DE ERRORES (Para ver qué falla en el móvil) ---
-window.onerror = function(message, source, lineno, colno, error) {
-    alert(`Error Crítico:\n${message}\nLínea: ${lineno}`);
-    // Intentar quitar pantalla de carga para que no se quede trabado
-    const loader = document.getElementById('loading-screen');
-    if(loader) loader.style.display = 'none';
-};
+console.log("⚡ FIT DATA: App v13.0 (Performance & Offline Mode)...");
 
-console.log("⚡ FIT DATA: App v13.1 (Safe Start Mode)...");
+/* ===========================================================
+   1. SERVICE WORKER REGISTRATION (Mejora 2: Instant Load)
+   =========================================================== */
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+            .then(reg => console.log('✅ Service Worker registrado:', reg.scope))
+            .catch(err => console.error('❌ Error SW:', err));
+    });
+}
 
 const firebaseConfig = {
   apiKey: "AIzaSyDW40Lg6QvBc3zaaA58konqsH3QtDrRmyM",
@@ -28,13 +31,17 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-// Persistencia (Try/Catch silencioso)
+// Persistencia defensiva para Offline
 try {
     enableIndexedDbPersistence(db).catch((err) => {
-        console.warn('Persistencia:', err.code);
+        if (err.code == 'failed-precondition') { console.warn('Persistencia offline desactivada (múltiples pestañas).'); }
+        else if (err.code == 'unimplemented') { console.warn('Navegador no soporta persistencia.'); }
     });
-} catch(e) { console.debug("Persistencia ya activa."); }
+} catch(e) { console.debug("Persistencia no disponible o ya iniciada."); }
 
+/* ===========================================================
+   VARIABLES GLOBALES & ESTADO
+   =========================================================== */
 const AVAILABLE_DIETS = [
     { name: "Dieta Volumen (3000kcal)", file: "volumen_3000.html" },
     { name: "Dieta Definición (2000kcal)", file: "definicion_2000.html" },
@@ -58,7 +65,7 @@ let currentNoticeId = null;
 let currentNoticeType = null; 
 let deferredPrompt = null; 
 
-// Cache & Edit Variables
+// Variables Cache & Edit
 let rankFilterTime = 'all';        
 let rankFilterGender = 'all';       
 let rankFilterCat = 'kg';           
@@ -66,14 +73,8 @@ let adminUsersCache = null;
 let editingHistoryId = null; 
 let currentHistoryDetails = null; 
 
-// Scroll Virtual Variables
-let currentFilteredExercises = [];
-let renderedExerciseCount = 0;
-const EXERCISE_BATCH_SIZE = 20;
-let exerciseObserver = null;
-
-// Global Chart Instances
-let chartInstance = null; let progressChart = null; let fatChartInstance = null; let bioChartInstance = null; let measureChartInstance = null; let coachFatChart = null; let coachBioChart = null; let coachMeasureChart = null; let radarChartInstance = null; let coachChart = null; 
+// Instancias Gráficas
+let chartInstance = null; let progressChart = null; let fatChartInstance = null; let bioChartInstance = null; let measureChartInstance = null; let coachFatChart = null; let coachBioChart = null; let coachMeasureChart = null; let radarChartInstance = null; let coachChart = null; let userRadarChart = null; let coachRadarChart = null;
 
 let selectedUserCoach = null; 
 let selectedUserObj = null; 
@@ -81,6 +82,7 @@ let editingRoutineId = null;
 let currentPose = 'front'; 
 let coachCurrentPose = 'front'; 
 let allRoutinesCache = []; 
+let assistantsCache = [];
 let currentRoutineSelections = [];
 window.currentRoutineSelections = currentRoutineSelections; 
 let swapTargetIndex = null; 
@@ -89,6 +91,15 @@ let selectedRoutineForMassAssign = null;
 let assignMode = 'plan'; 
 let noticeTargetUid = null; 
 
+// Variables para Infinite Scroll (Mejora 3)
+let exercisesBatchIndex = 0;
+let filteredExercisesList = [];
+let exercisesObserver = null;
+const BATCH_SIZE = 20;
+
+/* ===========================================================
+   INSTALL PROMPT (PWA)
+   =========================================================== */
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredPrompt = e;
@@ -115,6 +126,9 @@ if (isIos() && !isInStandaloneMode()) {
     if(container && iosHint) { container.classList.remove('hidden'); iosHint.classList.remove('hidden'); }
 }
 
+/* ===========================================================
+   TELEGRAM & UI INJECTION
+   =========================================================== */
 function injectTelegramUI() {
     const regForm = document.getElementById('register-form');
     const regEmail = document.getElementById('reg-email');
@@ -139,70 +153,62 @@ function injectTelegramUI() {
     }
 }
 
-// --- AUTH OBSERVER (STARTUP CRÍTICO) ---
+/* ===========================================================
+   AUTH OBSERVER
+   =========================================================== */
 onAuthStateChanged(auth, async (user) => {
-    // Seguridad: Quitamos loader inmediatamente si tarda mucho
-    setTimeout(() => { document.getElementById('loading-screen')?.classList.add('hidden'); }, 4000);
-
+    // Lazy Load UI: Ocultamos loading screen lo antes posible
+    const loadingScreen = document.getElementById('loading-screen');
+    
     if(user) {
         currentUser = user;
         try {
             const snap = await getDoc(doc(db,"users",user.uid));
             if(snap.exists()){
                 userData = snap.data();
-                document.getElementById('loading-screen')?.classList.add('hidden'); // Exito: Quitar loader
-                
                 checkPhotoVisualReminder();
                 initCommunityListener();
                 checkPhotoReminder();
                 injectTelegramUI();
                 checkNotices(); 
-                
-                if(userData.role === 'admin' || userData.role === 'assistant') { document.getElementById('top-btn-coach')?.classList.remove('hidden'); }
-                
+                if(userData.role === 'admin' || userData.role === 'assistant') { document.getElementById('top-btn-coach').classList.remove('hidden'); }
                 if(userData.role !== 'admin' && userData.role !== 'assistant' && !sessionStorage.getItem('notif_dismissed')) {
                     const routinesSnap = await getDocs(query(collection(db, "routines"), where("assignedTo", "array-contains", user.uid)));
-                    if(!routinesSnap.empty) {
-                         const badge = document.getElementById('notif-badge');
-                         if(badge) badge.style.display = 'block';
-                    }
+                    if(!routinesSnap.empty) document.getElementById('notif-badge').style.display = 'block';
                 }
-
                 if(userData.approved){
-                    document.getElementById('main-header')?.classList.remove('hidden');
+                    // Transición suave
+                    if(loadingScreen) {
+                        loadingScreen.style.opacity = '0';
+                        setTimeout(() => loadingScreen.classList.add('hidden'), 300);
+                    }
+                    document.getElementById('main-header').classList.remove('hidden');
                     loadRoutines();
                     
+                    // Recuperar sesión activa (Mejora 4)
                     const savedW = localStorage.getItem('fit_active_workout');
                     if(savedW) { 
                         try {
                             activeWorkout = JSON.parse(savedW); 
+                            // No cambiamos de pestaña automáticamente, dejamos que el usuario decida,
+                            // pero mostramos indicador visual en el botón de Routines
                             renderWorkout(); 
-                            switchTab('workout-view'); 
                             startTimerMini(); 
-                            showToast("⚠️ Sesión recuperada");
-                        } catch(err) {
-                            console.error("Error parseando workout guardado", err);
-                            localStorage.removeItem('fit_active_workout');
-                            switchTab('routines-view');
-                        }
+                            showToast("⚠️ Tienes un entreno activo.");
+                        } catch(e) { console.error("Error parsing saved workout", e); }
                     } else { 
                         switchTab('routines-view'); 
                     }
                 } else { alert("Cuenta en revisión."); signOut(auth); }
-            } else {
-                // Usuario autenticado pero sin documento en DB (Caso raro)
-                document.getElementById('loading-screen')?.classList.add('hidden');
-                alert("Error de usuario. Contacta soporte.");
             }
         } catch(e) { 
-            console.error("Error init:", e); 
-            document.getElementById('loading-screen')?.classList.add('hidden');
-            alert("Error de conexión: " + e.message);
+            console.log("Offline mode or error:", e); 
+            if(loadingScreen) loadingScreen.classList.add('hidden');
         }
     } else {
-        setTimeout(() => { document.getElementById('loading-screen')?.classList.add('hidden'); }, 500);
+        if(loadingScreen) loadingScreen.classList.add('hidden');
         switchTab('auth-view');
-        document.getElementById('main-header')?.classList.add('hidden');
+        document.getElementById('main-header').classList.add('hidden');
         if(communityUnsubscribe) communityUnsubscribe();
         injectTelegramUI();
     }
@@ -225,12 +231,54 @@ function initCommunityListener() {
     });
 }
 
+/* ===========================================================
+   UI UTILS & NAVIGATION (Mejora 4: Persistencia Nav)
+   =========================================================== */
 let scrollPos = 0;
 window.openModal = (id) => { scrollPos = window.pageYOffset; document.body.style.top = `-${scrollPos}px`; document.body.classList.add('modal-open'); const m = document.getElementById(id); if(m) m.classList.add('active'); };
 window.closeModal = (id) => { const m = document.getElementById(id); if(m) m.classList.remove('active'); document.body.classList.remove('modal-open'); document.body.style.top = ''; window.scrollTo(0, scrollPos); };
 const normalizeText = (text) => { if(!text) return ""; return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); };
 window.toggleElement = (id) => { const el = document.getElementById(id); if(el) el.classList.toggle('hidden'); };
 
+window.switchTab = (t) => {
+    // Si intentamos ir a routines-view pero tenemos un entreno activo
+    if (t === 'routines-view' && activeWorkout) {
+         // Permitimos ir a routines, pero el botón de "Volver al entreno" debería ser visible o accesible.
+         // En esta implementación, simplemente permitimos la navegación. 
+         // El estado se guarda en localStorage y variable global.
+    }
+    
+    // Si volvemos a la vista de workout (Mejora 4)
+    if (t === 'workout-view') {
+        if (!activeWorkout) {
+             // Si no hay entreno, redirigir a routines
+             t = 'routines-view';
+        } else {
+             // Si hay entreno, asegurarnos que está renderizado
+             renderWorkout();
+             startTimerMini();
+        }
+    }
+
+    document.querySelectorAll('.view-container').forEach(e => e.classList.remove('active'));
+    const target = document.getElementById(t);
+    if(target) { target.classList.add('active'); window.scrollTo(0,0); }
+    
+    document.querySelectorAll('.top-nav-item').forEach(n => n.classList.remove('active'));
+    
+    // Activar iconos nav
+    if (t === 'routines-view') document.getElementById('top-btn-routines').classList.add('active');
+    if (t === 'ranking-view') document.getElementById('top-btn-ranking').classList.add('active');
+    if (t === 'profile-view') { document.getElementById('top-btn-profile').classList.add('active'); window.loadProfile(); }
+    if (t === 'admin-view' || t === 'coach-detail-view') { document.getElementById('top-btn-coach').classList.add('active'); }
+    if (t === 'workout-view') {
+        // Podríamos iluminar Routines o crear un botón extra, pero por ahora desmarcamos todos
+    }
+};
+
+/* ===========================================================
+   AUDIO ENGINE
+   =========================================================== */
 let lastBeepSecond = -1; 
 function initAudioEngine() { if (!audioCtx) { const AudioContext = window.AudioContext || window.webkitAudioContext; audioCtx = new AudioContext(); } if (audioCtx.state === 'suspended') { audioCtx.resume(); } }
 function playTickSound(isFinal = false) { if(!audioCtx) return; if (audioCtx.state === 'suspended') audioCtx.resume(); if (isFinal) { playFinalAlarm(); return; } const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain(); osc.frequency.value = 1000; osc.type = 'sine'; osc.connect(gain); gain.connect(audioCtx.destination); const now = audioCtx.currentTime; osc.start(now); gain.gain.setValueAtTime(0.8, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1); osc.stop(now + 0.1); }
@@ -239,33 +287,6 @@ document.body.addEventListener('touchstart', initAudioEngine, {once:true});
 document.body.addEventListener('click', initAudioEngine, {once:true});
 window.testSound = () => { playTickSound(false); setTimeout(() => playFinalAlarm(), 600); };
 window.enableNotifications = () => { if (!("Notification" in window)) return alert("Tu dispositivo no soporta notificaciones."); Notification.requestPermission().then((p) => { if (p === "granted") { if("vibrate" in navigator) navigator.vibrate([200]); new Notification("Fit Data", { body: "✅ Notificaciones listas.", icon: "logo.png" }); alert("✅ Vinculado."); } else alert("❌ Permiso denegado."); }); };
-
-window.switchTab = (t) => {
-    document.querySelectorAll('.view-container').forEach(e => e.classList.remove('active'));
-    const target = document.getElementById(t);
-    if(target) { target.classList.add('active'); window.scrollTo(0,0); }
-    document.querySelectorAll('.top-nav-item').forEach(n => n.classList.remove('active'));
-    if (t === 'routines-view') document.getElementById('top-btn-routines')?.classList.add('active');
-    if (t === 'ranking-view') document.getElementById('top-btn-ranking')?.classList.add('active');
-    if (t === 'profile-view') { document.getElementById('top-btn-profile')?.classList.add('active'); window.loadProfile(); }
-    if (t === 'admin-view' || t === 'coach-detail-view') { document.getElementById('top-btn-coach')?.classList.add('active'); }
-
-    checkResumeState(t);
-};
-
-function checkResumeState(currentTab) {
-    const existing = document.getElementById('resume-workout-pill');
-    if(existing) existing.remove();
-    
-    if (activeWorkout && currentTab !== 'workout-view') {
-        const pill = document.createElement('div');
-        pill.id = 'resume-workout-pill';
-        pill.style.cssText = "position:fixed; bottom:80px; right:20px; background:var(--accent-color); color:#000; padding:10px 20px; border-radius:50px; font-weight:bold; box-shadow:0 4px 15px rgba(0,0,0,0.5); z-index:999; animation: pulse 2s infinite; cursor:pointer; display:flex; align-items:center; gap:5px;";
-        pill.innerHTML = `<span>⚡ VOLVER AL ENTRENO</span>`;
-        pill.onclick = () => window.switchTab('workout-view');
-        document.body.appendChild(pill);
-    }
-}
 
 window.switchProfileSubTab = (tabName) => {
     document.querySelectorAll('.p-tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -283,6 +304,9 @@ window.switchCoachSubTab = (tabName) => {
     const content = document.getElementById(`ctab-content-${tabName}`); if(content) content.classList.remove('hidden');
 };
 
+/* ===========================================================
+   CHARTS & VISUALS
+   =========================================================== */
 function renderFilteredChart(canvasId, instanceVar, dataHistory, typeKey, color, rangeDays = 9999) {
     const ctx = document.getElementById(canvasId); 
     if (!ctx) return null; 
@@ -392,13 +416,6 @@ window.dismissNotif = () => { document.getElementById('notif-badge').style.displ
 
 function getExerciseData(name) {
     if(!name) return { img: 'logo.png', mInfo: {main:'General', sec:[]}, type:'c', v:null };
-    
-    // Defensive Check: EXERCISES from data.js
-    if(!EXERCISES || !Array.isArray(EXERCISES)) {
-        console.warn("EXERCISES no cargado");
-        return { img: 'logo.png', mInfo: {main:'General', sec:[]}, type:'c', v:null };
-    }
-
     let match = EXERCISES.find(e => e.n === name);
     if (!match) { const cleanName = normalizeText(name); match = EXERCISES.find(e => normalizeText(e.n) === cleanName); }
     if (!match) { const cleanName = normalizeText(name); match = EXERCISES.find(e => { const cleanDbName = normalizeText(e.n); return cleanDbName.includes(cleanName) || cleanName.includes(cleanDbName); }); }
@@ -417,8 +434,7 @@ function getExerciseData(name) {
 function getMuscleInfoByGroup(m) { let s = []; if(m==="Pecho") s=["Tríceps","Hombros"]; else if(m==="Espalda") s=["Bíceps", "Antebrazo"]; else if(m==="Cuádriceps") s=["Glúteos", "Gemelos"]; else if(m==="Isquios") s=["Glúteos", "Espalda Baja"]; else if(m==="Hombros") s=["Tríceps", "Trapecio"]; else if(m==="Bíceps") s=["Antebrazo"]; else if(m==="Tríceps") s=["Hombros", "Pecho"]; else if(m==="Glúteos") s=["Isquios", "Cuádriceps"]; return {main:m, sec:s}; }
 
 async function loadRoutines() {
-    const l = document.getElementById('routines-list'); if(!l) return;
-    l.innerHTML = 'Cargando...';
+    const l = document.getElementById('routines-list'); l.innerHTML = 'Cargando...';
     onSnapshot(query(collection(db,"routines")), (s)=>{
         l.innerHTML = '';
         let myRoutines = [];
@@ -429,7 +445,18 @@ async function loadRoutines() {
             if (indexA === -1) indexA = 9999; if (indexB === -1) indexB = 9999;
             return indexA - indexB;
         });
-        if(myRoutines.length === 0) { l.innerHTML = '<div style="padding:20px; text-align:center; color:#666;">No tienes rutinas asignadas.</div>'; return; }
+        
+        // Botón "Volver al Entreno" si existe (Mejora 4)
+        if (activeWorkout) {
+             const div = document.createElement('div');
+             div.className = 'card';
+             div.style.border = '2px solid var(--accent-color)';
+             div.style.background = 'rgba(0, 255, 136, 0.1)';
+             div.innerHTML = `<h3 style="color:var(--accent-color); text-align:center;">⚡ ENTRENO EN CURSO</h3><button class="btn" onclick="window.switchTab('workout-view')">CONTINUAR</button>`;
+             l.appendChild(div);
+        }
+
+        if(myRoutines.length === 0) { const msg = document.createElement('div'); msg.style.cssText="padding:20px; text-align:center; color:#666;"; msg.innerText='No tienes rutinas asignadas.'; l.appendChild(msg); return; }
         myRoutines.forEach(r => {
             const div = document.createElement('div'); div.className = 'card'; const canEdit = r.uid === currentUser.uid;
             div.innerHTML = `<div style="display:flex; justify-content:space-between;"><h3 style="color:var(--accent-color)">${r.name}</h3><div>${canEdit ? `<button style="background:none;border:none;margin-right:10px;" onclick="openEditor('${r.id}')">✏️</button><button style="background:none;border:none;" onclick="delRoutine('${r.id}')">🗑️</button>` : '🔒'}</div></div><p style="color:#666; font-size:0.8rem; margin:10px 0;">${r.exercises.length} Ejercicios</p><button class="btn" onclick="startWorkout('${r.id}')">ENTRENAR</button>`;
@@ -438,6 +465,9 @@ async function loadRoutines() {
     });
 }
 
+/* ===========================================================
+   MEJORA 3: RENDER LIMIT & INFINITE SCROLL
+   =========================================================== */
 window.openEditor = async (id = null) => { 
     editingRoutineId = id; 
     document.getElementById('editor-name').value = ''; 
@@ -453,21 +483,8 @@ window.openEditor = async (id = null) => {
     } 
     window.currentRoutineSelections = currentRoutineSelections; 
     
-    currentFilteredExercises = [...EXERCISES].sort((a, b) => { 
-        const aSelected = currentRoutineSelections.some(x => x.n === a.n); 
-        const bSelected = currentRoutineSelections.some(x => x.n === b.n); 
-        if (aSelected && !bSelected) return -1; 
-        if (!aSelected && bSelected) return 1; 
-        return 0; 
-    });
-    
-    renderedExerciseCount = 0;
-    const c = document.getElementById('exercise-selector-list');
-    if(c) {
-        c.innerHTML = ''; 
-        renderNextBatch();
-    }
-    
+    // Inicializar lista para infinite scroll
+    initExerciseList(EXERCISES);
     renderSelectedSummary(); 
     switchTab('editor-view'); 
 };
@@ -479,75 +496,93 @@ window.filterExercises = (t) => {
         const muscleMatch = e.m ? normalizeText(e.m).includes(cleanSearch) : false; 
         return nameMatch || muscleMatch; 
     }); 
-    
-    currentFilteredExercises = filtered;
-    renderedExerciseCount = 0;
-    const c = document.getElementById('exercise-selector-list');
-    if(c) {
-        c.innerHTML = ''; 
-        renderNextBatch();
-    }
+    initExerciseList(filtered);
 };
 
-window.renderNextBatch = () => {
-    const c = document.getElementById('exercise-selector-list');
-    if(!c) return;
-    const fragment = document.createDocumentFragment();
-    const nextBatch = currentFilteredExercises.slice(renderedExerciseCount, renderedExerciseCount + EXERCISE_BATCH_SIZE);
+// Nueva función de inicialización de lista (Mejora 3)
+function initExerciseList(list) {
+    const c = document.getElementById('exercise-selector-list'); 
+    c.innerHTML = ''; // Limpiar
     
-    if (nextBatch.length === 0) return;
+    // Ordenar: Seleccionados primero
+    const sortedList = [...list].sort((a, b) => { 
+        const aSelected = currentRoutineSelections.some(x => x.n === a.n); 
+        const bSelected = currentRoutineSelections.some(x => x.n === b.n); 
+        if (aSelected && !bSelected) return -1; 
+        if (!aSelected && bSelected) return 1; 
+        return 0; 
+    });
 
-    nextBatch.forEach(e => {
+    filteredExercisesList = sortedList;
+    exercisesBatchIndex = 0;
+    
+    // Crear elemento centinela para el observer
+    const sentinel = document.createElement('div');
+    sentinel.id = 'exercises-sentinel';
+    sentinel.style.height = '20px';
+    
+    c.appendChild(sentinel);
+
+    // Configurar Observer
+    if (exercisesObserver) exercisesObserver.disconnect();
+    
+    exercisesObserver = new IntersectionObserver((entries) => {
+        if(entries[0].isIntersecting) {
+            renderNextBatch();
+        }
+    }, { root: c, rootMargin: '200px' });
+    
+    exercisesObserver.observe(sentinel);
+    
+    // Renderizar primer lote inmediatamente
+    renderNextBatch();
+}
+
+function renderNextBatch() {
+    const c = document.getElementById('exercise-selector-list');
+    const sentinel = document.getElementById('exercises-sentinel');
+    if (!c || !sentinel) return;
+
+    const start = exercisesBatchIndex * BATCH_SIZE;
+    const end = start + BATCH_SIZE;
+    const batch = filteredExercisesList.slice(start, end);
+    
+    if (batch.length === 0) {
+        exercisesObserver.disconnect();
+        return;
+    }
+
+    const fragment = document.createDocumentFragment();
+
+    batch.forEach(e => {
         const d = document.createElement('div'); 
         const selectedIndex = currentRoutineSelections.findIndex(x => x.n === e.n); 
         const isSelected = selectedIndex > -1; 
         const obj = isSelected ? currentRoutineSelections[selectedIndex] : null; 
         d.id = `ex-card-${normalizeText(e.n)}`; 
         d.className = 'ex-select-item';
-
+        
         if (isSelected) {
             d.classList.add('selected-red-active'); 
             d.style.cssText = "background: rgba(50, 10, 10, 0.95); border-left: 4px solid var(--accent-color); border: 1px solid var(--accent-color); padding: 10px; margin-bottom: 5px; border-radius: 8px; flex-direction:column; align-items: stretch;";
             const linkActiveStyle = obj.s ? "color: var(--accent-color); text-shadow: 0 0 5px var(--accent-color);" : "color:rgba(255,255,255,0.2);";
-            d.innerHTML = `<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;"><div style="display:flex; align-items:center; gap:10px;"><img src="${e.img}" onerror="this.src='logo.png'" style="width:40px; height:40px; border-radius:4px; object-fit:cover;"><span style="font-weight:bold; color:white;">${e.n}</span></div><b class="btn-remove-ex" onclick="event.stopPropagation(); removeSelection('${obj.n}')" style="cursor:pointer; color:#ff5555; font-size:1.2rem; padding:5px;">✕</b></div><div class="summary-inputs" style="display:flex; gap:8px; align-items:center; width:100%;"><input type="number" value="${obj.series || 5}" oninput="window.updateSelectionData(${selectedIndex}, 'series', this.value)" onclick="event.stopPropagation()" placeholder="Ser" style="width:60px; text-align:center; padding:8px; background:#000; border:1px solid #444; color:white; border-radius:4px;"><span style="color:#aaa;">x</span><input type="text" value="${obj.reps || '20-16-16-16-16'}" onclick="event.stopPropagation()" style="flex:1; padding:8px; background:#000; border:1px solid #444; color:white; border-radius:4px;" oninput="window.updateSelectionData(${selectedIndex}, 'reps', this.value)" placeholder="Reps"><span style="font-size:1.8rem; cursor:pointer; margin-left:5px; ${linkActiveStyle}" onclick="event.stopPropagation(); toggleSuperset(${selectedIndex})" title="Superserie">🔗</span></div>`;
+            d.innerHTML = `<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;"><div style="display:flex; align-items:center; gap:10px;"><img src="${e.img}" onerror="this.src='logo.png'" loading="lazy" style="width:40px; height:40px; border-radius:4px; object-fit:cover;"><span style="font-weight:bold; color:white;">${e.n}</span></div><b class="btn-remove-ex" onclick="event.stopPropagation(); removeSelection('${obj.n}')" style="cursor:pointer; color:#ff5555; font-size:1.2rem; padding:5px;">✕</b></div><div class="summary-inputs" style="display:flex; gap:8px; align-items:center; width:100%;"><input type="number" value="${obj.series || 5}" oninput="window.updateSelectionData(${selectedIndex}, 'series', this.value)" onclick="event.stopPropagation()" placeholder="Ser" style="width:60px; text-align:center; padding:8px; background:#000; border:1px solid #444; color:white; border-radius:4px;"><span style="color:#aaa;">x</span><input type="text" value="${obj.reps || '20-16-16-16-16'}" onclick="event.stopPropagation()" style="flex:1; padding:8px; background:#000; border:1px solid #444; color:white; border-radius:4px;" oninput="window.updateSelectionData(${selectedIndex}, 'reps', this.value)" placeholder="Reps"><span style="font-size:1.8rem; cursor:pointer; margin-left:5px; ${linkActiveStyle}" onclick="event.stopPropagation(); toggleSuperset(${selectedIndex})" title="Superserie">🔗</span></div>`;
             d.onclick = null; 
         } else {
-            d.innerHTML = `<img src="${e.img}" onerror="this.src='logo.png'"><span>${e.n}</span>`;
-            d.onclick = () => { currentRoutineSelections.push({ n: e.n, s: false, series: 5, reps: "20-16-16-16-16" }); window.openEditor(editingRoutineId); };
+            // Lazy loading nativo en imágenes
+            d.innerHTML = `<img src="${e.img}" onerror="this.src='logo.png'" loading="lazy"><span>${e.n}</span>`;
+            d.onclick = () => { 
+                currentRoutineSelections.push({ n: e.n, s: false, series: 5, reps: "20-16-16-16-16" }); 
+                // Al seleccionar, reiniciamos la lista para que aparezca arriba
+                initExerciseList(filteredExercisesList);
+                renderSelectedSummary(); 
+            };
         }
         fragment.appendChild(d);
     });
 
-    const oldSentinel = document.getElementById('scroll-sentinel');
-    if(oldSentinel) oldSentinel.remove();
-
-    c.appendChild(fragment);
-    renderedExerciseCount += nextBatch.length;
-
-    if (renderedExerciseCount < currentFilteredExercises.length) {
-        const sentinel = document.createElement('div');
-        sentinel.id = 'scroll-sentinel';
-        sentinel.style.height = '20px';
-        sentinel.innerText = '...';
-        c.appendChild(sentinel);
-        setupObserver(sentinel);
-    }
-};
-
-function setupObserver(target) {
-    if (exerciseObserver) exerciseObserver.disconnect();
-    exerciseObserver = new IntersectionObserver((entries) => {
-        if(entries[0].isIntersecting) {
-            renderNextBatch();
-        }
-    }, { root: document.getElementById('exercise-selector-list'), threshold: 0.1 });
-    exerciseObserver.observe(target);
-}
-
-function renderExercises(l) {
-   // Legacy placeholder - functionality moved to openEditor and renderNextBatch
-   // to ensure pagination works correctly.
-   console.log("Using Virtual Render");
+    c.insertBefore(fragment, sentinel);
+    exercisesBatchIndex++;
 }
 
 window.renderSelectedSummary = () => {
@@ -561,7 +596,7 @@ window.renderSelectedSummary = () => {
 };
 
 window.updateSelectionData = (idx, field, val) => { if(currentRoutineSelections[idx]) { currentRoutineSelections[idx][field] = field === 'series' ? (parseInt(val)||0) : val; } };
-window.toggleSuperset = (idx) => { if (idx < currentRoutineSelections.length - 1) { currentRoutineSelections[idx].s = !currentRoutineSelections[idx].s; window.openEditor(editingRoutineId); } else { alert("No puedes hacer superserie con el último ejercicio."); } };
+window.toggleSuperset = (idx) => { if (idx < currentRoutineSelections.length - 1) { currentRoutineSelections[idx].s = !currentRoutineSelections[idx].s; initExerciseList(filteredExercisesList); renderSelectedSummary(); } else { alert("No puedes hacer superserie con el último ejercicio."); } };
 window.removeSelection = (name) => { currentRoutineSelections = currentRoutineSelections.filter(x => x.n !== name); renderSelectedSummary(); window.filterExercises(document.getElementById('ex-search').value); }
 window.saveRoutine = async () => { const n = document.getElementById('editor-name').value; const s = window.currentRoutineSelections; if(!n || s.length === 0) return alert("❌ Faltan datos"); const btn = document.getElementById('btn-save-routine'); btn.innerText = "💾 GUARDANDO..."; let initialAssignments = []; if (userData.role !== 'admin') { initialAssignments.push(currentUser.uid); } try { const data = { uid: currentUser.uid, name: n, exercises: s, createdAt: serverTimestamp(), assignedTo: initialAssignments }; if(editingRoutineId) { await updateDoc(doc(db, "routines", editingRoutineId), { name: n, exercises: s }); } else { await addDoc(collection(db, "routines"), data); } alert("✅ Guardado"); switchTab('routines-view'); } catch(e) { alert("Error: " + e.message); } finally { btn.innerText = "GUARDAR"; } };
 window.cloneRoutine = async (id) => { if(!confirm("¿Deseas clonar esta rutina para editarla?")) return; try { const docRef = doc(db, "routines", id); const docSnap = await getDoc(docRef); if (!docSnap.exists()) return alert("Error: No existe."); const originalData = docSnap.data(); const newName = prompt("Nombre copia:", `${originalData.name} (Copia)`); if (!newName) return; const copyData = { ...originalData, name: newName, uid: currentUser.uid, createdAt: serverTimestamp(), assignedTo: [] }; await addDoc(collection(db, "routines"), copyData); alert(`✅ Clonada. Ahora puedes editar "${newName}".`); window.loadAdminLibrary(); } catch (e) { alert("Error: " + e.message); } };
@@ -630,17 +665,9 @@ window.savePhotoReminder = async () => { const d = document.getElementById('phot
 window.addWeightEntry = async () => { const wStr = prompt("Introduce tu peso (kg):"); if(!wStr) return; const w = parseFloat(wStr.replace(',','.')); if(isNaN(w)) return alert("Número inválido"); const newEntry = { weight: w, date: new Date() }; try { await updateDoc(doc(db,"users",currentUser.uid), { weightHistory: arrayUnion(newEntry) }); if (!userData.weightHistory) userData.weightHistory = []; userData.weightHistory.push({ weight: w, date: { seconds: Date.now() / 1000 } }); window.loadProfile(); alert("✅ Peso Guardado"); } catch(e) { alert("Error al guardar: " + e.message); } };
 
 function saveLocalWorkout() { localStorage.setItem('fit_active_workout', JSON.stringify(activeWorkout)); }
-window.cancelWorkout = () => { if(confirm("⚠ ¿SEGURO QUE QUIERES CANCELAR?\nSe perderán los datos de este entrenamiento.")) { activeWorkout = null; localStorage.removeItem('fit_active_workout'); if(durationInt) clearInterval(durationInt); switchTab('routines-view'); const p = document.getElementById('resume-workout-pill'); if(p) p.remove(); } };
+window.cancelWorkout = () => { if(confirm("⚠ ¿SEGURO QUE QUIERES CANCELAR?\nSe perderán los datos de este entrenamiento.")) { activeWorkout = null; localStorage.removeItem('fit_active_workout'); if(durationInt) clearInterval(durationInt); switchTab('routines-view'); } };
 
 window.startWorkout = async (rid) => {
-    // 1. Check if workout exists
-    if (activeWorkout) {
-        if (confirm(`⚠ YA TIENES UN ENTRENO ACTIVO: "${activeWorkout.name}"\n\n¿Quieres reanudarlo?\n(Cancelar para iniciar uno nuevo y borrar el actual)`)) {
-            switchTab('workout-view');
-            return;
-        }
-    }
-
     if(document.getElementById('cfg-wake').checked && 'wakeLock' in navigator) { try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e) { console.log("WakeLock error", e); } }
     try {
         const snap = await getDoc(doc(db,"routines",rid)); const r = snap.data();
@@ -665,6 +692,7 @@ window.changeRankFilter = (type, val) => {
     window.loadRankingView();
 };
 
+// CACHÉ DIARIO (RESET 00:00)
 window.loadRankingView = async () => {
     switchTab('ranking-view'); 
     const list = document.getElementById('ranking-list'); 
@@ -673,7 +701,6 @@ window.loadRankingView = async () => {
     try {
         const cacheKey = `rank_cache_${rankFilterTime}_${rankFilterGender}_${rankFilterCat}`;
         const todayStr = new Date().toDateString();
-
         const cachedRaw = localStorage.getItem(cacheKey);
         
         let useCache = false;
@@ -812,6 +839,7 @@ window.loadRankingView = async () => {
 window.initSwap = (idx) => { swapTargetIndex = idx; const currentEx = activeWorkout.exs[idx]; const muscle = currentEx.mInfo.main; const list = document.getElementById('swap-list'); list.innerHTML = ''; const alternatives = EXERCISES.filter(e => getMuscleInfoByGroup(e.m).main === muscle && e.n !== currentEx.n); if(alternatives.length === 0) list.innerHTML = '<div style="padding:10px;">No hay alternativas directas.</div>'; else alternatives.forEach(alt => { const d = document.createElement('div'); d.style.padding = "10px"; d.style.borderBottom = "1px solid #333"; d.style.cursor = "pointer"; d.innerHTML = `<b>${alt.n}</b>`; d.onclick = () => window.performSwap(alt.n); list.appendChild(d); }); window.openModal('modal-swap'); };
 window.performSwap = (newName) => { if(swapTargetIndex === null) return; const data = getExerciseData(newName); const currentSets = activeWorkout.exs[swapTargetIndex].sets.map(s => ({...s, prev:'-', d: false})); activeWorkout.exs[swapTargetIndex].n = newName; activeWorkout.exs[swapTargetIndex].img = data.img; activeWorkout.exs[swapTargetIndex].video = data.v; activeWorkout.exs[swapTargetIndex].sets = currentSets; saveLocalWorkout(); renderWorkout(); window.closeModal('modal-swap'); };
 
+// RENDER WORKOUT
 function renderWorkout() {
     const c = document.getElementById('workout-exercises'); c.innerHTML = ''; document.getElementById('workout-title').innerText = activeWorkout.name;
     activeWorkout.exs.forEach((e, i) => {
@@ -830,6 +858,7 @@ function renderWorkout() {
             const isDropClass = s.isDrop ? 'is-dropset' : ''; 
             const displayNum = s.numDisplay || (j + 1);
             
+            // Logic: Drop or Delete
             let dropActionBtn = '';
             if (!s.d) { 
                 if (s.isDrop) {
@@ -938,12 +967,13 @@ function showToast(msg) {
 }
 function createToastContainer() { const div = document.createElement('div'); div.id = 'toast-container'; document.body.appendChild(div); return div; }
 
+// LOGICA DE COMPRESION Y LIMPIEZA
 async function compressAndCleanupWorkouts(uid) {
     try {
         const q = query(collection(db, "workouts"), where("uid", "==", uid), orderBy("date", "desc"));
         const snapshot = await getDocs(q);
         const docs = snapshot.docs;
-        const KEEP_LIMIT = 30; 
+        const KEEP_LIMIT = 30; // 🛡️ SEGURO: Guarda 30 entrenos completos para UX
 
         if (docs.length <= KEEP_LIMIT) return; 
 
@@ -1014,6 +1044,7 @@ window.finishWorkout = async (rpeVal) => {
                 const r = parseInt(set.r) || 0; 
                 const w = parseFloat(set.w) || 0; 
                 
+                // VALIDACIÓN
                 if (w === 0) missingWeights = true;
 
                 totalSets++; totalReps += r; totalKg += (r * w);
@@ -1066,12 +1097,8 @@ window.finishWorkout = async (rpeVal) => {
         compressAndCleanupWorkouts(currentUser.uid); 
         
         showToast(`🏆 ¡Entreno nº ${workoutNum} completado! Tiempo: ${durationStr}`);
-        activeWorkout = null; 
-        localStorage.removeItem('fit_active_workout'); 
-        if (durationInt) clearInterval(durationInt); 
-        if (wakeLock) { await wakeLock.release(); wakeLock = null; } 
-        const pill = document.getElementById('resume-workout-pill'); if(pill) pill.remove();
-        window.switchTab('routines-view');
+        localStorage.removeItem('fit_active_workout'); activeWorkout = null; 
+        if (durationInt) clearInterval(durationInt); if (wakeLock) { await wakeLock.release(); wakeLock = null; } window.switchTab('routines-view');
     } catch (error) { console.error("Error finish:", error); alert("Error crítico al guardar. Revisa tu conexión."); }
 };
 
@@ -1109,6 +1136,7 @@ window.renderProgressChart = (exName) => {
     progressChart = new Chart(ctx, { type: 'line', data: { labels: labels, datasets: [ { label: 'Volumen (Kg)', data: volData, borderColor: '#00ff88', backgroundColor: 'rgba(0, 255, 136, 0.1)', yAxisID: 'y', tension: 0.4, fill: true, pointRadius: 3 }, { label: '1RM Est.', data: rmData, borderColor: '#ffaa00', yAxisID: 'y1', tension: 0.3, pointRadius: 4 }, { label: 'Peso Máx', data: prData, borderColor: '#ff3333', borderDash: [5, 5], yAxisID: 'y1', tension: 0.3, pointRadius: 2 } ] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { type: 'linear', display: true, position: 'left', grid: { color: '#333' } }, y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false } }, x: { ticks: { color: '#888', maxRotation: 45, minRotation: 0 } } } } }); 
 };
 
+// ADMIN / COACH LOGIC
 window.toggleAdminMode = (mode) => { document.getElementById('tab-users').classList.toggle('active', mode==='users'); document.getElementById('tab-lib').classList.toggle('active', mode==='lib'); document.getElementById('tab-plans').classList.toggle('active', mode==='plans'); document.getElementById('admin-users-card').classList.toggle('hidden', mode!=='users'); document.getElementById('admin-lib-card').classList.toggle('hidden', mode!=='lib'); document.getElementById('admin-plans-card').classList.toggle('hidden', mode!=='plans'); if(mode==='users') window.loadAdminUsers(); if(mode==='lib') window.loadAdminLibrary(); if(mode==='plans') window.loadAdminPlans(); };
 
 window.loadAdminUsers = async (forceRefresh = false) => {
@@ -1563,9 +1591,7 @@ window.openCoachView = async (uid, u) => {
 
 window.toggleUserFeature = async (field, isActive) => {
     if(!selectedUserCoach || !selectedUserObj) return;
-
     selectedUserObj[field] = isActive;
-
     const toggleMap = {
         'showBio': 'coach-view-bio',
         'showSkinfolds': 'coach-view-skinfolds',
@@ -1579,7 +1605,6 @@ window.toggleUserFeature = async (field, isActive) => {
         const pCard = document.getElementById('coach-view-photos');
         if(pCard) isActive ? pCard.classList.remove('hidden') : pCard.classList.add('hidden');
     }
-
     try {
         await updateDoc(doc(db, "users", selectedUserCoach), { [field]: isActive });
         console.log(`Updated ${field} to ${isActive}`);
