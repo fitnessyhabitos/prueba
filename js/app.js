@@ -4,7 +4,7 @@ import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, onSnapshot, q
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 import { EXERCISES } from './data.js';
 
-console.log("⚡ FIT DATA: App v16.2 (Hoisting Fix & Stability)...");
+console.log("⚡ FIT DATA: App v16.3 (Syntax Fix - Clean)...");
 
 // --- 1. Service Worker ---
 if ('serviceWorker' in navigator) {
@@ -82,7 +82,7 @@ let exercisesObserver = null;
 const BATCH_SIZE = 20;
 
 // ===========================================================
-// ⚡ CORE HELPER FUNCTIONS (MOVIDAS ARRIBA PARA EVITAR ERRORES)
+// ⚡ CORE HELPER FUNCTIONS (DEFINIDAS UNA SOLA VEZ AQUÍ)
 // ===========================================================
 
 function checkPhotoVisualReminder() {
@@ -150,6 +150,18 @@ function showNoticeModal(notice, headerTitle, type) {
     window.openModal('modal-notice-viewer'); 
 }
 
+window.dismissNotice = async () => { 
+    if (currentNoticeType === 'GLOBAL') { 
+        if(currentNoticeId) localStorage.setItem('dismissed_global_notice_id', currentNoticeId); 
+    } else if (currentNoticeType === 'INDIVIDUAL') { 
+        try { 
+            await updateDoc(doc(db, "users", currentUser.uid), { "coachNotice.active": false }); 
+            if(userData.coachNotice) userData.coachNotice.active = false; 
+        } catch(e) {} 
+    } 
+    window.closeModal('modal-notice-viewer'); 
+};
+
 // ===========================================================
 // ⚡ AUTH OBSERVER
 // ===========================================================
@@ -182,7 +194,6 @@ onAuthStateChanged(auth, async (user) => {
                 userData = snap.data();
                 console.log("Datos cargados. Ejecutando helpers...");
                 
-                // AHORA ES SEGURO LLAMAR A ESTAS FUNCIONES
                 checkPhotoVisualReminder();
                 initCommunityListener();
                 checkPhotoReminder();
