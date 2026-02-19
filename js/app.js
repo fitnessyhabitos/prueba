@@ -4,7 +4,7 @@ import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 import { EXERCISES } from './data.js';
 
-console.log("⚡ FIT DATA: App v17.0 (SMART SETS & PR REMINDER)...");
+console.log("⚡ FIT DATA: App v16.0 (COACH MODE & ADVANCED EDIT)...");
 
 // --- 1. REGISTRO SERVICE WORKER ---
 if ('serviceWorker' in navigator) {
@@ -28,7 +28,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const storage = getStorage(app);
 
-// --- INICIALIZACIÓN FIRESTORE (Zero Warnings & Multi-Tab Support) ---
+// --- NUEVA INICIALIZACIÓN FIRESTORE (Zero Warnings & Multi-Tab Support) ---
 const db = initializeFirestore(app, {
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager()
@@ -62,7 +62,7 @@ let deferredPrompt = null;
 // Cache & Filtros
 let rankFilterTime = 'all';        
 let rankFilterGender = 'all';       
-let rankFilterCat = 'kg';            
+let rankFilterCat = 'kg';           
 let adminUsersCache = null; 
 let editingHistoryId = null; 
 let currentHistoryDetails = null; 
@@ -149,10 +149,12 @@ onAuthStateChanged(auth, async (user) => {
     if(user) {
         currentUser = user;
         
+        // Restauración Inmediata LocalStorage
         const savedW = localStorage.getItem('fit_active_workout');
         if(savedW) { 
             try { 
                 activeWorkout = JSON.parse(savedW);
+                // Si estamos en Ghost Mode (entrenando cliente), mostrar aviso
                 if(activeWorkout.ghostUid) {
                     showToast("⚠️ MODO COACH ACTIVO: Entrenando Cliente");
                 }
@@ -568,117 +570,86 @@ window.cancelWorkout = () => {
     } 
 };
 
-// --- GHOST MODE & PRE-FILL ---
+// --- GHOST MODE & START WORKOUT (OPTIMIZADO O(1)) ---
 window.startWorkout = async (rid, targetUid = null) => {
     if(activeWorkout) { if(!confirm("⚠️ Ya tienes un entreno en curso. ¿Deseas descartarlo e iniciar este nuevo?")) return; }
     if(document.getElementById('cfg-wake').checked && 'wakeLock' in navigator) { try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e) { console.log("WakeLock error", e); } }
+    
     try {
-        const snap = await getDoc(doc(db,"routines",rid)); const r = snap.data();
+        const snap = await getDoc(doc(db, "routines", rid)); 
+        const r = snap.data();
         const effectiveUid = targetUid || currentUser.uid;
         
-        let targetPrs = userData.prs || {};
-        if (effectiveUid !== currentUser.uid) {
-            const uSnap = await getDoc(doc(db, "users", effectiveUid));
-            if (uSnap.exists()) targetPrs = uSnap.data().prs || {};
+        // 1. Obtener Datos de Usuario (Maximos históricos de O(1))
+        let targetUserData = userData;
+        if (targetUid && targetUid !== currentUser.uid) {
+            const uSnap = await getDoc(doc(db, "users", targetUid));
+            targetUserData = uSnap.exists() ? uSnap.data() : {};
         }
+        
+        const userMaxPerSet = targetUserData?.maxWeightsPerSet ?? {};
 
-        let lastWorkoutData = null; 
-        const q = query(collection(db, "workouts"), where("uid", "==", effectiveUid)); 
+        // 2. Obtener solo la ÚLTIMA rutina idéntica para los valores Previos
+        const q = query(
+            collection(db, "workouts"), 
+            where("uid", "==", effectiveUid), 
+            where("routine", "==", r.name), 
+            orderBy("date", "desc"), 
+            limit(1)
+        ); 
         const wSnap = await getDocs(q); 
-        const sameRoutine = wSnap.docs.map(d=>d.data()).filter(d => d.routine === r.name).sort((a,b) => b.date - a.date); 
-        if(sameRoutine.length > 0) lastWorkoutData = sameRoutine[0].details;
+        const lastWorkoutData = wSnap.empty ? null : wSnap.docs[0].data().details;
         
         const now = Date.now(); initAudioEngine();
+        
         activeWorkout = { 
-            name: r.name, 
-            startTime: now, 
-            ghostUid: targetUid,
+            name: r.name, startTime: now, ghostUid: targetUid,
             exs: r.exercises.map(exObj => { 
-                const isString = typeof exObj === 'string'; 
-                const name = isString ? exObj : exObj.n; 
+                const isString = typeof exObj === 'string'; const name = isString ? exObj : exObj.n; 
                 const isSuperset = isString ? false : (exObj.s || false); 
                 const customSeriesNum = isString ? 5 : (parseInt(exObj.series) || 5); 
                 const customRepsPattern = isString ? "20-16-16-16-16" : (exObj.reps || "20-16-16-16-16"); 
                 const repsArray = customRepsPattern.split('-'); 
                 const data = getExerciseData(name); 
-                const prWeight = targetPrs[name] || 0;
+                
+                const exMaxSets = userMaxPerSet[name] ?? {}; 
 
-                let sets = Array(customSeriesNum).fill().map((_, i) => {
-                    let targetReps = repsArray[i] ? parseInt(repsArray[i]) : parseInt(repsArray[repsArray.length - 1]);
-                    let sR = targetReps;
-                    let sW = 0;
-                    let prevStr = '-';
-                    
-                    if(lastWorkoutData) {
-                        const prevEx = lastWorkoutData.find(ld => ld.n === name);
-                        if(prevEx && prevEx.s && prevEx.s[i]) {
-                            sR = parseInt(prevEx.s[i].r) || sR;
-                            sW = parseFloat(prevEx.s[i].w) || sW;
-                            const dLabel = prevEx.s[i].isDrop ? ' (D)' : '';
-                            prevStr = `${sR}x${sW}k${dLabel}`;
-                        }
-                    }
-                    
-                    return { 
-                        r: "", // Empty so it shows placeholder
-                        w: "", // Empty so it shows placeholder
-                        suggestedR: sR,
-                        suggestedW: sW,
-                        d: false, 
-                        prev: prevStr, 
-                        pr: prWeight,
-                        numDisplay: (i + 1).toString() 
-                    }; 
-                });
+                let sets = Array(customSeriesNum).fill().map((_, i) => ({ 
+                    r: repsArray[i] ? parseInt(repsArray[i]) : parseInt(repsArray[repsArray.length - 1]), 
+                    w: 0, d: false, prev: '-', prevKg: '-', prevReps: '-', maxKg: exMaxSets[i] ?? '-', numDisplay: (i + 1).toString() 
+                })); 
+                
+                if(lastWorkoutData) { 
+                    const prevEx = lastWorkoutData.find(ld => ld.n === name); 
+                    if(prevEx && prevEx.s) { 
+                        sets = sets.map((s, i) => { 
+                            if(prevEx.s[i]) { 
+                                s.prevReps = prevEx.s[i].r;
+                                s.prevKg = prevEx.s[i].w;
+                                const dLabel = prevEx.s[i].isDrop ? ' (D)' : ''; 
+                                s.prev = `${s.prevReps}x${s.prevKg}kg${dLabel}`; 
+                            } 
+                            return s; 
+                        }); 
+                    } 
+                } 
                 return { n:name, img:data.img, mInfo: data.mInfo, type: data.type, video: data.v, sets: sets, superset: isSuperset, note: "" }; 
             }) 
         };
         
-        saveLocalWorkout(); 
-        renderWorkout(); 
-        switchTab('workout-view'); 
-        startTimerMini();
-        
-        if(targetUid) {
-            showToast("⚠️ MODO COACH ACTIVO: Entrenando Cliente");
-        }
+        saveLocalWorkout(); renderWorkout(); switchTab('workout-view'); startTimerMini();
+        if(targetUid) { showToast("⚠️ MODO COACH ACTIVO: Entrenando Cliente"); }
 
-    } catch(e) { console.error(e); alert("Error iniciando entreno: " + e.message); }
+    } catch(e) { console.error("Error startWorkout:", e); alert("Error iniciando entreno: " + e.message); }
 };
 
 window.addSet = (exIdx) => { 
-    const ex = activeWorkout.exs[exIdx];
-    const sets = ex.sets; 
-    const lastSet = sets[sets.length - 1];
-    const pr = sets.length > 0 ? sets[0].pr : 0;
-    sets.push({
-        r: "", w: "", 
-        suggestedR: lastSet ? lastSet.suggestedR : 10, 
-        suggestedW: lastSet ? lastSet.suggestedW : 0, 
-        d: false, prev: '-', pr: pr, 
-        numDisplay: (sets.length + 1).toString()
-    }); 
-    saveLocalWorkout(); 
-    renderWorkout(); 
+    const sets = activeWorkout.exs[exIdx].sets; 
+    sets.push({r:16, w:0, d:false, prev:'-', prevKg: '-', prevReps: '-', maxKg: '-', numDisplay: (sets.length + 1).toString()}); 
+    saveLocalWorkout(); renderWorkout(); 
 };
 window.removeSet = (exIdx) => { if(activeWorkout.exs[exIdx].sets.length > 1) { activeWorkout.exs[exIdx].sets.pop(); saveLocalWorkout(); renderWorkout(); } };
-window.toggleAllSets = (exIdx) => { 
-    const ex = activeWorkout.exs[exIdx]; 
-    const allDone = ex.sets.every(s => s.d); 
-    const newState = !allDone; 
-    ex.sets.forEach((s, j) => { 
-        s.d = newState; 
-        if(newState) {
-            const rEl = document.getElementById(`inp-r-${exIdx}-${j}`);
-            const wEl = document.getElementById(`inp-w-${exIdx}-${j}`);
-            if(rEl && rEl.value !== "") s.r = rEl.value; else if(s.r === "") s.r = s.suggestedR || 0;
-            if(wEl && wEl.value !== "") s.w = wEl.value; else if(s.w === "") s.w = s.suggestedW || 0;
-        }
-    }); 
-    saveLocalWorkout(); 
-    renderWorkout(); 
-    if(newState) showToast("✅ Todas las series completadas"); 
-};
+window.toggleAllSets = (exIdx) => { const ex = activeWorkout.exs[exIdx]; const allDone = ex.sets.every(s => s.d); const newState = !allDone; ex.sets.forEach(s => { s.d = newState; }); saveLocalWorkout(); renderWorkout(); if(newState) showToast("✅ Todas las series completadas"); };
 window.openNoteModal = (idx) => { noteTargetIndex = idx; const existingNote = activeWorkout.exs[idx].note || ""; document.getElementById('exercise-note-input').value = existingNote; window.openModal('modal-note'); };
 window.saveNote = () => { if (noteTargetIndex === null) return; const txt = document.getElementById('exercise-note-input').value.trim(); activeWorkout.exs[noteTargetIndex].note = txt; saveLocalWorkout(); renderWorkout(); window.closeModal('modal-note'); showToast(txt ? "📝 Nota guardada" : "🗑️ Nota borrada"); };
 window.toggleRankingOptIn = async (val) => { try { await updateDoc(doc(db, "users", currentUser.uid), { rankingOptIn: val }); userData.rankingOptIn = val; const btnRank = document.getElementById('top-btn-ranking'); if(val) btnRank.classList.remove('hidden'); else btnRank.classList.add('hidden'); showToast(val ? "🏆 Ahora participas en el Ranking" : "👻 Ranking desactivado"); } catch(e) { alert("Error actualizando perfil"); } };
@@ -711,8 +682,9 @@ window.loadRankingView = async () => {
 };
 
 window.initSwap = (idx) => { swapTargetIndex = idx; const currentEx = activeWorkout.exs[idx]; const muscle = currentEx.mInfo.main; const list = document.getElementById('swap-list'); list.innerHTML = ''; const alternatives = EXERCISES.filter(e => getMuscleInfoByGroup(e.m).main === muscle && e.n !== currentEx.n); if(alternatives.length === 0) list.innerHTML = '<div style="padding:10px;">No hay alternativas directas.</div>'; else alternatives.forEach(alt => { const d = document.createElement('div'); d.style.padding = "10px"; d.style.borderBottom = "1px solid #333"; d.style.cursor = "pointer"; d.innerHTML = `<b>${alt.n}</b>`; d.onclick = () => window.performSwap(alt.n); list.appendChild(d); }); window.openModal('modal-swap'); };
-window.performSwap = (newName) => { if(swapTargetIndex === null) return; const data = getExerciseData(newName); const currentSets = activeWorkout.exs[swapTargetIndex].sets.map(s => ({...s, prev:'-', d: false})); activeWorkout.exs[swapTargetIndex].n = newName; activeWorkout.exs[swapTargetIndex].img = data.img; activeWorkout.exs[swapTargetIndex].video = data.v; activeWorkout.exs[swapTargetIndex].sets = currentSets; saveLocalWorkout(); renderWorkout(); window.closeModal('modal-swap'); };
+window.performSwap = (newName) => { if(swapTargetIndex === null) return; const data = getExerciseData(newName); const currentSets = activeWorkout.exs[swapTargetIndex].sets.map(s => ({...s, prev:'-', prevKg: '-', prevReps: '-', maxKg: '-', d: false})); activeWorkout.exs[swapTargetIndex].n = newName; activeWorkout.exs[swapTargetIndex].img = data.img; activeWorkout.exs[swapTargetIndex].video = data.v; activeWorkout.exs[swapTargetIndex].sets = currentSets; saveLocalWorkout(); renderWorkout(); window.closeModal('modal-swap'); };
 
+// --- RENDER WORKOUT ACTUALIZADO ---
 function renderWorkout() {
     const c = document.getElementById('workout-exercises'); c.innerHTML = ''; document.getElementById('workout-title').innerText = activeWorkout.name;
     activeWorkout.exs.forEach((e, i) => {
@@ -722,31 +694,18 @@ function renderWorkout() {
         const swapBtn = `<button class="btn-small btn-outline" style="float:right; width:auto; margin:0 5px 0 0; padding:2px 8px; border-color:#aaa; color:#fff;" onclick="window.initSwap(${i})">🔄</button>`;
         const hasNote = e.note && e.note.length > 0; const noteBtn = `<button class="ex-note-btn ${hasNote ? 'has-note' : ''}" onclick="window.openNoteModal(${i})">📝</button>`;
         let bars = (e.type === 'i') ? `<div class="mini-bar-label"><span>${e.mInfo.main}</span><span>100%</span></div><div class="mini-track"><div class="mini-fill fill-primary"></div></div>` : `<div class="mini-bar-label"><span>${e.mInfo.main}</span><span>70%</span></div><div class="mini-track"><div class="mini-fill fill-primary" style="width:70%"></div></div>`;
-        let setsHtml = `<div class="set-header"><div>#</div><div>PREV / PR</div><div>REPS</div><div>KG</div><div></div></div>`;
         
+        let setsHtml = `<div class="set-header"><div>#</div><div>HISTORIAL</div><div>REPS</div><div>KG</div><div></div></div>`;
         e.sets.forEach((s, j) => { 
-            const suggR = s.suggestedR !== undefined ? s.suggestedR : (s.r || 0);
-            const suggW = s.suggestedW !== undefined ? s.suggestedW : (s.w || 0);
-            const prWeight = s.pr || 0;
-            const repsVal = (s.r === "" || s.r === undefined) ? "" : s.r;
-            const weightVal = (s.w === "" || s.w === undefined) ? "" : s.w; 
-            
-            const isDisabled = s.d ? 'disabled' : ''; const rowOpacity = s.d ? 'opacity:0.5; pointer-events:none;' : ''; const isDropClass = s.isDrop ? 'is-dropset' : ''; const displayNum = s.numDisplay || (j + 1);
+            const weightVal = s.w === 0 ? '' : s.w; const isDisabled = s.d ? 'disabled' : ''; const rowOpacity = s.d ? 'opacity:0.5; pointer-events:none;' : ''; const isDropClass = s.isDrop ? 'is-dropset' : ''; const displayNum = s.numDisplay || (j + 1);
             let dropActionBtn = !s.d ? (s.isDrop ? `<button class="btn-small btn-outline" style="padding:2px 6px; font-size:0.7rem; border-color:#f55; color:#f55; margin-left:auto;" onclick="window.removeSpecificSet(${i},${j})">✕</button>` : `<button class="btn-small btn-outline" style="padding:2px; font-size:0.5rem; border-color:var(--warning-color); color:var(--warning-color);" onclick="window.addDropset(${i},${j})">DROP</button>`) : '';
             
-            setsHtml += `<div class="set-row ${isDropClass}" style="${rowOpacity}">
-                <div class="set-num" style="${s.isDrop ? 'color:var(--warning-color); font-size:0.7rem;' : ''}">${displayNum}</div>
-                <div class="prev-data">
-                    <div style="font-weight:bold; color:#ccc;">${s.prev}</div>
-                    <div style="font-size:0.55rem; color:var(--warning-color); font-family:var(--font-sport);">🏆 ${prWeight}k</div>
-                </div>
-                <div><input type="number" id="inp-r-${i}-${j}" placeholder="${suggR}" value="${repsVal}" ${isDisabled} onchange="uS(${i},${j},'r',this.value)"></div>
-                <div><input type="number" id="inp-w-${i}-${j}" placeholder="${suggW}" value="${weightVal}" ${isDisabled} onchange="uS(${i},${j},'w',this.value)"></div>
-                <div style="display:flex; flex-direction:column; gap:2px; pointer-events: auto; align-items:center;">
-                    <button id="btn-${i}-${j}" class="btn-outline ${s.d ? 'btn-done' : ''}" style="margin:0;padding:0;height:32px;width:100%;" onclick="tS(${i},${j})">${s.d ? '✓' : ''}</button>
-                    ${dropActionBtn}
-                </div>
-            </div>`; 
+            const prevText = s.prev !== '-' ? `Últ: ${s.prev}` : '-';
+            const maxText = s.maxKg !== '-' ? `Máx: ${s.maxKg}kg` : '';
+            const histHtml = `<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.2; width:100%; overflow:hidden;"><span style="font-size:0.65rem; color:#888; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; max-width:100%;">${prevText}</span><span style="font-size:0.6rem; color:var(--accent-color); font-weight:bold; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; max-width:100%;">${maxText}</span></div>`;
+            const kgPlaceholder = s.prevKg !== '-' ? s.prevKg : 'kg';
+
+            setsHtml += `<div class="set-row ${isDropClass}" style="${rowOpacity}"><div class="set-num" style="${s.isDrop ? 'color:var(--warning-color); font-size:0.7rem;' : ''}">${displayNum}</div>${histHtml}<div><input type="number" value="${s.r}" ${isDisabled} onchange="uS(${i},${j},'r',this.value)" inputmode="decimal" pattern="[0-9]*"></div><div><input type="number" class="kg-input-placeholder" placeholder="${kgPlaceholder}" value="${weightVal}" ${isDisabled} onchange="uS(${i},${j},'w',this.value)" inputmode="decimal" pattern="[0-9]*"></div><div style="display:flex; flex-direction:column; gap:2px; pointer-events: auto; align-items:center;"><button id="btn-${i}-${j}" class="btn-outline ${s.d ? 'btn-done' : ''}" style="margin:0;padding:0;height:32px;width:100%;" onclick="tS(${i},${j})">${s.d ? '✓' : ''}</button>${dropActionBtn}</div></div>`; 
         });
         setsHtml += `<div class="sets-actions"><button class="btn-set-control" style="border-color:var(--success-color); color:var(--success-color); margin-right:auto;" onclick="window.toggleAllSets(${i})">✓ TODO</button><button class="btn-set-control" onclick="removeSet(${i})">- Serie</button><button class="btn-set-control" onclick="addSet(${i})">+ Serie</button></div>`;
         card.innerHTML = `<div class="workout-split"><div class="workout-visual"><img src="${e.img}" onerror="this.src='logo.png'"></div><div class="workout-bars" style="width:100%">${bars}</div></div><h3 style="margin-bottom:10px; border:none; display:flex; align-items:center; justify-content:space-between;"><span>${e.n}</span><div>${noteBtn} ${videoBtnHtml} ${swapBtn}</div></h3>${setsHtml}`;
@@ -754,45 +713,31 @@ function renderWorkout() {
     });
 }
 window.removeSpecificSet = (exIdx, setIdx) => { if(activeWorkout.exs[exIdx].sets.length > 1) { activeWorkout.exs[exIdx].sets.splice(setIdx, 1); saveLocalWorkout(); renderWorkout(); } };
+
 window.addDropset = (exIdx, setIdx) => { 
     const currentSet = activeWorkout.exs[exIdx].sets[setIdx]; 
     currentSet.d = true; 
-    if (currentSet.r === "") currentSet.r = currentSet.suggestedR || 0;
-    if (currentSet.w === "") currentSet.w = currentSet.suggestedW || 0;
-
-    const newSet = { 
-        r: "", w: "", 
-        suggestedR: Math.floor(currentSet.r * 0.8) || 10, 
-        suggestedW: Math.floor(currentSet.w * 0.7) || 0, 
-        d: false, prev: 'DROPSET', pr: currentSet.pr, isDrop: true, 
-        numDisplay: (parseInt(currentSet.numDisplay) || (setIdx + 1)) + ".5" 
-    }; 
+    const newSet = { r: Math.floor(currentSet.r * 0.8) || 10, w: Math.floor(currentSet.w * 0.7) || 0, d: false, prev: 'DROPSET', prevKg: '-', prevReps: '-', maxKg: '-', isDrop: true, numDisplay: (parseInt(currentSet.numDisplay) || (setIdx + 1)) + ".5" }; 
     activeWorkout.exs[exIdx].sets.splice(setIdx + 1, 0, newSet); 
-    saveLocalWorkout(); 
-    renderWorkout(); 
+    saveLocalWorkout(); renderWorkout(); 
 };
+
 window.uS = (i,j,k,v) => { activeWorkout.exs[i].sets[j][k]=v; saveLocalWorkout(); };
 
 window.tS = async (i, j) => { 
     const s = activeWorkout.exs[i].sets[j]; 
     const exerciseName = activeWorkout.exs[i].n; 
-    s.d = !s.d; 
     
+    if (!s.d) {
+        if ((!s.w || s.w === 0 || s.w === "") && s.prevKg && s.prevKg !== '-') {
+            s.w = parseFloat(s.prevKg);
+        }
+    }
+
+    s.d = !s.d; 
     if(s.d) { 
-        // 1. Lee inputs directamente por si el onchange no disparó
-        const rEl = document.getElementById(`inp-r-${i}-${j}`);
-        const wEl = document.getElementById(`inp-w-${i}-${j}`);
-        
-        if (rEl && rEl.value !== "") s.r = rEl.value; 
-        else if (s.r === "") s.r = s.suggestedR || 0;
-
-        if (wEl && wEl.value !== "") s.w = wEl.value; 
-        else if (s.w === "") s.w = s.suggestedW || 0;
-
         const weight = parseFloat(s.w) || 0; 
         const reps = parseInt(s.r) || 0; 
-        
-        // 2. Comprobar PRs
         if (weight > 0 && reps > 0) { 
             const estimated1RM = Math.round(weight / (1.0278 - (0.0278 * reps))); 
             if (!userData.rmRecords) userData.rmRecords = {}; 
@@ -805,19 +750,16 @@ window.tS = async (i, j) => {
             } else { 
                 const currentWeightPR = userData.prs ? (userData.prs[exerciseName] || 0) : 0; 
                 if (weight > currentWeightPR) { 
-                    if(!userData.prs) userData.prs = {}; 
-                    userData.prs[exerciseName] = weight; 
+                    if(!userData.prs) userData.prs = {}; userData.prs[exerciseName] = weight; 
                     const newPrCount = (userData.stats.prCount || 0) + 1; 
                     updateDoc(doc(db, "users", currentUser.uid), { [`prs.${exerciseName}`]: weight, "stats.prCount": newPrCount }); 
-                    userData.stats.prCount = newPrCount; 
-                    showToast(`💪 Peso Máximo Superado: ${weight}kg`); 
+                    userData.stats.prCount = newPrCount; showToast(`💪 Peso Máximo Superado: ${weight}kg`); 
                 } 
             } 
         } 
         openRest(); 
     } 
-    saveLocalWorkout(); 
-    renderWorkout(); 
+    saveLocalWorkout(); renderWorkout(); 
 };
 
 window.requestNotifPermission = () => { if ("Notification" in window) { Notification.requestPermission().then(p => { if(p === 'granted') showToast("✅ Notificaciones activadas"); else showToast("❌ Permiso denegado"); }); } else { showToast("⚠️ Tu navegador no soporta notificaciones"); } };
@@ -832,6 +774,8 @@ function createToastContainer() { const div = document.createElement('div'); div
 async function compressAndCleanupWorkouts(uid) { try { const q = query(collection(db, "workouts"), where("uid", "==", uid), orderBy("date", "desc")); const snapshot = await getDocs(q); const docs = snapshot.docs; const KEEP_LIMIT = 30; if (docs.length <= KEEP_LIMIT) return; const docsToDelete = docs.slice(KEEP_LIMIT); const historyUpdates = []; const deletePromises = []; docsToDelete.forEach(docSnap => { const data = docSnap.data(); const dateSeconds = data.date?.seconds || Date.now()/1000; if(data.details && Array.isArray(data.details)) { data.details.forEach(ex => { let maxWeight = 0, totalVol = 0, bestRep = 0; if(ex.s && Array.isArray(ex.s)) { ex.s.forEach(set => { const w = parseFloat(set.w) || 0; const r = parseInt(set.r) || 0; if(w > maxWeight) { maxWeight = w; bestRep = r; } totalVol += (w * r); }); } if(maxWeight > 0 || totalVol > 0) { historyUpdates.push({ d: dateSeconds, n: ex.n, w: maxWeight, r: bestRep, v: totalVol }); } }); } deletePromises.push(deleteDoc(doc(db, "workouts", docSnap.id))); }); if (historyUpdates.length > 0) { await updateDoc(doc(db, "users", uid), { compressedHistory: arrayUnion(...historyUpdates) }); } await Promise.all(deletePromises); console.log(`♻️ Limpieza auto: ${deletePromises.length} eliminados.`); } catch (e) { console.error("Error limpieza:", e); } }
 window.runGlobalMigration = async () => { if(!confirm("⚠️ ATENCIÓN: Esta acción comprimirá el historial de TODOS los usuarios.\n\n¿Estás seguro de que quieres continuar?")) return; const btn = document.querySelector('#admin-users-card button[onclick="window.runGlobalMigration()"]'); const originalText = btn.innerText; btn.disabled = true; btn.innerText = "⏳ PROCESANDO..."; try { const usersSnap = await getDocs(collection(db, "users")); let count = 0; for (const uDoc of usersSnap.docs) { btn.innerText = `⏳ Usuario ${count + 1}/${usersSnap.size}...`; await compressAndCleanupWorkouts(uDoc.id); count++; } alert("✅ MIGRACIÓN COMPLETADA."); } catch (e) { alert("Error en migración: " + e.message); } finally { btn.innerText = originalText; btn.disabled = false; } };
 
+
+// --- FINISH WORKOUT (Guarda en DB los nuevos Maximos O(1)) ---
 window.finishWorkout = async (rpeVal) => { 
     try { 
         window.closeModal('modal-rpe'); 
@@ -840,16 +784,54 @@ window.finishWorkout = async (rpeVal) => {
         let muscleCounts = {}; 
         let missingWeights = false; 
         
+        const finalUid = activeWorkout.ghostUid || currentUser.uid;
+        
+        let targetStats = userData.stats || {workouts:0, totalKg:0, totalSets:0, totalReps:0, prCount:0};
+        let targetPrs = userData.prs || {};
+        let targetMaxPerSet = userData.maxWeightsPerSet || {};
+
+        if(activeWorkout.ghostUid) {
+             const uSnap = await getDoc(doc(db, "users", finalUid));
+             if(uSnap.exists()) {
+                 const uData = uSnap.data();
+                 targetStats = uData.stats || targetStats;
+                 targetPrs = uData.prs || targetPrs;
+                 targetMaxPerSet = uData.maxWeightsPerSet || {};
+             }
+        }
+
+        const maxPerSetUpdates = {};
+
         const cleanLog = activeWorkout.exs.map(e => { 
-            const completedSets = e.sets.filter(set => set.d).map(set => { 
+            let currentExMaxes = { ...targetMaxPerSet[e.n] } || {};
+            let hasNewMax = false;
+
+            const completedSets = e.sets.filter(set => set.d).map((set, idx) => { 
                 const r = parseInt(set.r) || 0; 
                 const w = parseFloat(set.w) || 0; 
                 if (w === 0) missingWeights = true; 
                 totalSets++; totalReps += r; totalKg += (r * w); 
                 const mName = e.mInfo?.main || "General"; 
                 muscleCounts[mName] = (muscleCounts[mName] || 0) + 1; 
+                
+                // Actualizar Record de Serie en memoria
+                if (w > (currentExMaxes[idx] || 0)) {
+                    currentExMaxes[idx] = w;
+                    hasNewMax = true;
+                }
+
                 return { r, w, isDrop: !!set.isDrop, numDisplay: String(set.numDisplay || "") }; 
             }); 
+            
+            // Si hay Récord de Serie, lo preparamos
+            if (hasNewMax) {
+                maxPerSetUpdates[`maxWeightsPerSet.${e.n}`] = currentExMaxes;
+                if (finalUid === currentUser.uid) {
+                    userData.maxWeightsPerSet = userData.maxWeightsPerSet || {};
+                    userData.maxWeightsPerSet[e.n] = currentExMaxes;
+                }
+            }
+
             return { n: e.n, s: completedSets, superset: !!e.superset, note: e.note || "" }; 
         }).filter(e => e.s.length > 0); 
         
@@ -863,19 +845,6 @@ window.finishWorkout = async (rpeVal) => {
         const s = Math.floor((durationMs % 60000) / 1000); 
         const durationStr = h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`; 
         
-        const finalUid = activeWorkout.ghostUid || currentUser.uid;
-        
-        let targetStats = userData.stats;
-        let targetPrs = userData.prs;
-        if(activeWorkout.ghostUid) {
-             const uSnap = await getDoc(doc(db, "users", finalUid));
-             if(uSnap.exists()) {
-                 const uData = uSnap.data();
-                 targetStats = uData.stats || {workouts:0, totalKg:0, totalSets:0, totalReps:0, prCount:0};
-                 targetPrs = uData.prs || {};
-             }
-        }
-
         const workoutNum = (targetStats?.workouts || 0) + 1; 
         const now = new Date(); 
         const currentMonthKey = `${now.getFullYear()}_${now.getMonth()}`; 
@@ -884,7 +853,17 @@ window.finishWorkout = async (rpeVal) => {
         
         await addDoc(collection(db, "workouts"), { uid: finalUid, date: serverTimestamp(), routine: activeWorkout.name || "Rutina sin nombre", rpe: rpeVal, note: note, details: cleanLog, workoutNumber: workoutNum, sessionVolume: Number(totalKg.toFixed(2)), duration: durationStr, monthKey: currentMonthKey, yearKey: currentYearKey, weekKey: currentWeekKey }); 
         
-        const updates = { "stats.workouts": increment(1), "stats.totalSets": increment(totalSets), "stats.totalReps": increment(totalReps), "stats.totalKg": increment(totalKg), "prs": targetPrs || {}, "lastWorkoutDate": serverTimestamp() }; 
+        const updates = { 
+            "stats.workouts": increment(1), 
+            "stats.totalSets": increment(totalSets), 
+            "stats.totalReps": increment(totalReps), 
+            "stats.totalKg": increment(totalKg), 
+            "prs": targetPrs || {}, 
+            "lastWorkoutDate": serverTimestamp() 
+        }; 
+        
+        // Empaquetar los records de series en la actualizacion de Firestore
+        Object.assign(updates, maxPerSetUpdates);
         
         updates[`stats_week_${currentWeekKey}.kg`] = increment(totalKg); updates[`stats_week_${currentWeekKey}.workouts`] = increment(1); updates[`stats_week_${currentWeekKey}.reps`] = increment(totalReps); 
         updates[`stats_month_${currentMonthKey}.kg`] = increment(totalKg); updates[`stats_month_${currentMonthKey}.workouts`] = increment(1); updates[`stats_month_${currentMonthKey}.reps`] = increment(totalReps); updates[`stats_month_${currentMonthKey}.sets`] = increment(totalSets); 
@@ -910,8 +889,12 @@ window.finishWorkout = async (rpeVal) => {
              window.switchTab('routines-view'); 
         }
 
-    } catch (error) { console.error("Error finish:", error); alert("Error crítico al guardar. Revisa tu conexión."); } 
+    } catch (error) { 
+        console.error("Error finish:", error); 
+        alert("Error crítico al guardar. Revisa tu conexión."); 
+    } 
 };
+
 
 window.openProgress = async () => { const m = document.getElementById('modal-progress'); const s = document.getElementById('progress-select'); s.innerHTML = '<option>Cargando datos...</option>'; window.openModal('modal-progress'); try { const snap = await getDocs(query(collection(db, "workouts"), where("uid", "==", currentUser.uid))); const recentWorkouts = snap.docs.map(d => d.data()); let compressed = userData.compressedHistory || []; const uniqueExercises = new Set(); recentWorkouts.forEach(w => { if (w.details) w.details.forEach(ex => uniqueExercises.add(ex.n)); }); compressed.forEach(c => uniqueExercises.add(c.n)); if (uniqueExercises.size === 0) { s.innerHTML = '<option>Sin historial</option>'; return; } s.innerHTML = '<option value="">-- Selecciona Ejercicio --</option>'; Array.from(uniqueExercises).sort().forEach(exName => { const opt = document.createElement('option'); opt.value = exName; opt.innerText = exName; s.appendChild(opt); }); window.fullHistoryCache = { recent: recentWorkouts, compressed: compressed }; } catch (e) { s.innerHTML = '<option>Error cargando</option>'; } };
 window.renderProgressChart = (exName) => { if (!exName || !window.fullHistoryCache) return; const ctx = document.getElementById('progressChart'); if (progressChart) progressChart.destroy(); const rawPoints = []; window.fullHistoryCache.compressed.forEach(c => { if(c.n === exName) { rawPoints.push({ date: c.d * 1000, vol: c.v, maxW: c.w, rm: c.w / (1.0278 - (0.0278 * c.r)) }); } }); window.fullHistoryCache.recent.forEach(w => { const ex = w.details?.find(d => d.n === exName); if(ex) { let tv = 0, mw = 0, bestRm = 0; ex.s.forEach(set => { const weight = parseFloat(set.w)||0; const reps = parseInt(set.r)||0; tv += weight*reps; if(weight > mw) mw = weight; if(weight > 0 && reps > 0) { const r = weight / (1.0278 - (0.0278 * reps)); if(r > bestRm) bestRm = r; } }); if(tv > 0) { rawPoints.push({ date: w.date.seconds * 1000, vol: tv, maxW: mw, rm: bestRm }); } } }); rawPoints.sort((a,b) => a.date - b.date); const labels = rawPoints.map(p => new Date(p.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })); const volData = rawPoints.map(p => p.vol); const rmData = rawPoints.map(p => Math.round(p.rm)); const prData = rawPoints.map(p => p.maxW); progressChart = new Chart(ctx, { type: 'line', data: { labels: labels, datasets: [ { label: 'Volumen (Kg)', data: volData, borderColor: '#00ff88', backgroundColor: 'rgba(0, 255, 136, 0.1)', yAxisID: 'y', tension: 0.4, fill: true, pointRadius: 3 }, { label: '1RM Est.', data: rmData, borderColor: '#ffaa00', yAxisID: 'y1', tension: 0.3, pointRadius: 4 }, { label: 'Peso Máx', data: prData, borderColor: '#ff3333', borderDash: [5, 5], yAxisID: 'y1', tension: 0.3, pointRadius: 2 } ] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { type: 'linear', display: true, position: 'left', grid: { color: '#333' } }, y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false } }, x: { ticks: { color: '#888', maxRotation: 45, minRotation: 0 } } } } }); };
@@ -958,9 +941,13 @@ function renderAdminList(usersList) {
         const div = document.createElement('div'); 
         div.className = rowClass; 
         
+        // --- AQUÍ ESTÁ EL CAMBIO PARA EL ROJO ---
         if(u.id === currentUser.uid) {
-            div.style.cssText = "border-left: 3px solid #ff3333 !important; background: rgba(255, 51, 51, 0.1) !important;"; 
+            // Sobreescribimos el borde a ROJO y un fondo rojizo suave
+            div.style.borderColor = "#ff3333"; 
+            div.style.backgroundColor = "rgba(255, 51, 51, 0.1)"; 
         }
+        // ----------------------------------------
 
         div.innerHTML=`${avatarHtml}<div style="overflow:hidden;"><div style="font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:white; display:flex; align-items:center;">${u.name} ${u.role === 'assistant' ? '🛡️' : ''}</div><div style="font-size:0.75rem; color:#888; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${u.email}</div></div><div style="display:flex; gap:8px;">${btnNotice}<button class="btn-outline btn-small" style="margin:0; border-color:#444; color:#ccc;" onclick="window.openCoachView('${u.id}', null)">⚙️</button></div>`; 
         l.appendChild(div); 
@@ -980,14 +967,17 @@ window.viewWorkoutDetails = (wId, routineName, detailsStr, noteStr, timeStr = ""
 function renderHistoryHTML(details) { let html = ''; details.forEach((ex, exIdx) => { const name = ex.n || ex; const sets = ex.s || []; const exNoteHtml = ex.note ? `<div style="font-size:0.75rem; color:#aaa; font-style:italic; margin-top:5px; padding:4px; border-left:2px solid #555; background:#111;">📝 ${ex.note}</div>` : ''; html += `<div class="detail-exercise-card"><div class="detail-exercise-title">${name}</div>${exNoteHtml}<div class="detail-sets-grid" id="hist-grid-${exIdx}">`; if (sets.length > 0) { sets.forEach((s, i) => { const num = s.numDisplay || (i + 1); const w = s.w || 0; const r = s.r || 0; const dropStyle = s.isDrop ? 'border: 1px solid var(--warning-color); background: rgba(255, 170, 0, 0.15);' : ''; html += `<div class="detail-set-badge history-set-item" style="${dropStyle}" data-ex="${exIdx}" data-set="${i}"><br><span class="detail-set-num">#${num}</span><br><span class="set-view"><b>${r}</b> <span style="color:#666">x</span> ${w}k</span><br></div>`; }); } else { html += `<div style="font-size:0.7rem; color:#666;">Sin datos.</div>`; } html += `</div></div>`; }); return html; }
 
 window.enableHistoryEdit = () => { 
+    // Reemplaza texto por inputs y añade botón para nueva serie
     const grids = document.querySelectorAll('.detail-sets-grid');
     grids.forEach((grid, exIdx) => {
+        // Añadir inputs a las existentes
         const items = grid.querySelectorAll('.history-set-item');
         items.forEach(item => {
             const setIdx = item.getAttribute('data-set');
             const setObj = currentHistoryDetails[exIdx].s[setIdx];
             item.innerHTML = `<br><div style="display:flex; gap:5px; align-items:center;"><br><input type="number" class="hist-edit-reps" value="${setObj.r}" style="width:40px; padding:2px; margin:0; text-align:center; background:#000; border:1px solid #444;" inputmode="decimal"><br><span style="color:#666">x</span><br><input type="number" class="hist-edit-weight" value="${setObj.w}" style="width:40px; padding:2px; margin:0; text-align:center; background:#000; border:1px solid #444;" inputmode="decimal"><br></div><br>`;
         });
+        // Botón añadir serie
         if(!grid.querySelector('.btn-add-hist-set')) {
              const addBtn = document.createElement('button');
              addBtn.className = 'btn-small btn-outline btn-add-hist-set';
@@ -1001,10 +991,16 @@ window.enableHistoryEdit = () => {
     document.getElementById('btn-save-history').classList.remove('hidden'); 
 };
 
+// Nueva función para añadir series al historial
 window.addHistorySet = (exIdx) => {
+    // 1. Guardar estado actual de los inputs antes de redibujar
     syncHistoryInputsState();
+    
+    // 2. Añadir nueva serie al modelo
     const newSet = { r: 0, w: 0, numDisplay: (currentHistoryDetails[exIdx].s.length + 1).toString() };
     currentHistoryDetails[exIdx].s.push(newSet);
+    
+    // 3. Redibujar y reactivar edición
     const container = document.getElementById('history-details-container');
     container.innerHTML = `<br>${renderHistoryHTML(currentHistoryDetails)}<br>`;
     window.enableHistoryEdit();
@@ -1025,7 +1021,7 @@ function syncHistoryInputsState() {
 }
 
 window.saveHistoryChanges = async () => { 
-    syncHistoryInputsState(); 
+    syncHistoryInputsState(); // Asegurar últimos datos
     try { 
         const btn = document.getElementById('btn-save-history'); 
         btn.innerText = "⏳ GUARDANDO..."; 
@@ -1096,6 +1092,7 @@ window.openCoachView = async (uid, u) => {
     rList.innerHTML = assigned.length ? '' : 'Ninguna rutina.'; 
     assigned.forEach(r => { 
         const div = document.createElement('div'); div.className = "assigned-routine-item"; 
+        // BOTÓN MODO ENTRENADOR
         const btnGhost = `<button class="btn-small btn" style="margin:0; width:auto; font-size:0.7rem; background:var(--accent-color); color:#000; margin-right:10px;" onclick="window.startWorkout('${r.id}', '${uid}')">▶️ 🏋🏻‍♂️</button>`;
         div.innerHTML = `<span>${r.name}</span><div style="display:flex;align-items:center;">${btnGhost}<button style="background:none;border:none;color:#f55;font-weight:bold;cursor:pointer;" onclick="window.unassignRoutine('${r.id}')">❌</button></div>`; 
         rList.appendChild(div); 
@@ -1112,6 +1109,7 @@ window.openCoachView = async (uid, u) => {
     wSnap.docs.map(doc => ({id: doc.id, ...doc.data()})).sort((a,b) => b.date - a.date).slice(0, 10).forEach(d => { 
         let date = '-', infoStr = ''; 
         if(d.date) { const dObj = d.date.seconds ? new Date(d.date.seconds*1000) : d.date.toDate(); date = dObj.toLocaleDateString(); infoStr = d.duration ? `⏱️ ${d.duration}` : dObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); } 
+        // BOTÓN BORRAR EN HISTORIAL COACH
         const btnDelete = `<button class="btn-small btn-danger" style="margin:0 5px;" onclick="window.deleteHistoryWorkout('${d.id}')">🗑️</button>`;
         hList.innerHTML += `<div class="history-row" style="grid-template-columns: 60px 1fr 30px 110px;"><div>${date}</div><div style="overflow:hidden; text-overflow:ellipsis;">${d.routine}</div><div>${d.rpe === 'Suave' ? '🟢' : (d.rpe === 'Duro' ? '🟠' : '🔴')}</div><div style="text-align:right;"><button class="btn-small btn-outline" onclick="viewWorkoutDetails('${d.id}', '${d.routine}', '${encodeURIComponent(JSON.stringify(d.details))}', '${encodeURIComponent(d.note||"")}', '${infoStr}')">Ver</button>${btnDelete}</div></div>`; 
     }); 
