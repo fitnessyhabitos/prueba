@@ -735,7 +735,7 @@ window.loadRankingView = async () => {
 window.initSwap = (idx) => { swapTargetIndex = idx; const currentEx = activeWorkout.exs[idx]; const muscle = currentEx.mInfo.main; const list = document.getElementById('swap-list'); list.innerHTML = ''; const alternatives = EXERCISES.filter(e => getMuscleInfoByGroup(e.m).main === muscle && e.n !== currentEx.n); if(alternatives.length === 0) list.innerHTML = '<div style="padding:10px;">No hay alternativas directas.</div>'; else alternatives.forEach(alt => { const d = document.createElement('div'); d.style.padding = "10px"; d.style.borderBottom = "1px solid #333"; d.style.cursor = "pointer"; d.innerHTML = `<b>${alt.n}</b>`; d.onclick = () => window.performSwap(alt.n); list.appendChild(d); }); window.openModal('modal-swap'); };
 window.performSwap = (newName) => { if(swapTargetIndex === null) return; const data = getExerciseData(newName); const currentSets = activeWorkout.exs[swapTargetIndex].sets.map(s => ({...s, prev:'-', prevKg: '-', prevReps: '-', maxKg: '-', d: false})); activeWorkout.exs[swapTargetIndex].n = newName; activeWorkout.exs[swapTargetIndex].img = data.img; activeWorkout.exs[swapTargetIndex].video = data.v; activeWorkout.exs[swapTargetIndex].sets = currentSets; saveLocalWorkout(); renderWorkout(); window.closeModal('modal-swap'); };
 
-// --- RENDER WORKOUT ACTUALIZADO ---
+// --- RENDER WORKOUT ACTUALIZADO (Con Emoji 🥇 para Récord) ---
 function renderWorkout() {
     const c = document.getElementById('workout-exercises'); c.innerHTML = ''; document.getElementById('workout-title').innerText = activeWorkout.name;
     activeWorkout.exs.forEach((e, i) => {
@@ -746,17 +746,16 @@ function renderWorkout() {
         const hasNote = e.note && e.note.length > 0; const noteBtn = `<button class="ex-note-btn ${hasNote ? 'has-note' : ''}" onclick="window.openNoteModal(${i})">📝</button>`;
         let bars = (e.type === 'i') ? `<div class="mini-bar-label"><span>${e.mInfo.main}</span><span>100%</span></div><div class="mini-track"><div class="mini-fill fill-primary"></div></div>` : `<div class="mini-bar-label"><span>${e.mInfo.main}</span><span>70%</span></div><div class="mini-track"><div class="mini-fill fill-primary" style="width:70%"></div></div>`;
         
-        // 1. Cambiado HISTORIAL a PREV
         let setsHtml = `<div class="set-header"><div>#</div><div>PREV</div><div>REPS</div><div>KG</div><div></div></div>`;
         e.sets.forEach((s, j) => { 
             const weightVal = s.w === 0 ? '' : s.w; const isDisabled = s.d ? 'disabled' : ''; const rowOpacity = s.d ? 'opacity:0.5; pointer-events:none;' : ''; const isDropClass = s.isDrop ? 'is-dropset' : ''; const displayNum = s.numDisplay || (j + 1);
             let dropActionBtn = !s.d ? (s.isDrop ? `<button class="btn-small btn-outline" style="padding:2px 6px; font-size:0.7rem; border-color:#f55; color:#f55; margin-left:auto;" onclick="window.removeSpecificSet(${i},${j})">✕</button>` : `<button class="btn-small btn-outline" style="padding:2px; font-size:0.5rem; border-color:var(--warning-color); color:var(--warning-color);" onclick="window.addDropset(${i},${j})">DROP</button>`) : '';
             
-            // 2. Quitamos la palabra "Últ:" para ahorrar espacio
+            // Textos Históricos optimizados:
             const prevText = s.prev !== '-' ? s.prev : '-';
-            const maxText = s.maxKg !== '-' ? `Máx: ${s.maxKg}kg` : '';
+            // AQUÍ ESTÁ EL CAMBIO: Quitamos "Máx:" y ponemos el emoji de la medalla
+            const maxText = s.maxKg !== '-' ? `🥇 ${s.maxKg}kg` : '';
             
-            // 3. Aplicamos el color rojo (accent-color) y el destello (accent-glow) al máximo
             const histHtml = `<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.2; width:100%; overflow:hidden;">
                 <span style="font-size:0.65rem; color:var(--accent-color); font-family:monospace; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; max-width:100%; opacity:0.85;">${prevText}</span>
                 <span style="font-size:0.6rem; color:var(--accent-color); font-weight:bold; text-shadow:var(--accent-glow); white-space:nowrap; text-overflow:ellipsis; overflow:hidden; max-width:100%; margin-top:2px;">${maxText}</span>
