@@ -4,7 +4,7 @@ import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 import { EXERCISES } from './data.js';
 
-console.log("⚡ FIT DATA: App v16.0 (COACH MODE & ADVANCED EDIT)...");
+console.log("⚡ FIT DATA: App v17.0 (SMART SETS & PR REMINDER)...");
 
 // --- 1. REGISTRO SERVICE WORKER ---
 if ('serviceWorker' in navigator) {
@@ -28,13 +28,12 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const storage = getStorage(app);
 
-// --- NUEVA INICIALIZACIÓN FIRESTORE (Zero Warnings & Multi-Tab Support) ---
+// --- INICIALIZACIÓN FIRESTORE (Zero Warnings & Multi-Tab Support) ---
 const db = initializeFirestore(app, {
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager()
   })
 });
-
 
 // --- VARIABLES GLOBALES ---
 const AVAILABLE_DIETS = [
@@ -150,12 +149,10 @@ onAuthStateChanged(auth, async (user) => {
     if(user) {
         currentUser = user;
         
-        // Restauración Inmediata LocalStorage
         const savedW = localStorage.getItem('fit_active_workout');
         if(savedW) { 
             try { 
                 activeWorkout = JSON.parse(savedW);
-                // Si estamos en Ghost Mode (entrenando cliente), mostrar aviso
                 if(activeWorkout.ghostUid) {
                     showToast("⚠️ MODO COACH ACTIVO: Entrenando Cliente");
                 }
@@ -235,7 +232,6 @@ window.switchTab = (t) => {
     const bar = document.getElementById('active-workout-bar');
     if(activeWorkout && t !== 'workout-view') {
         if(bar) bar.classList.remove('hidden');
-        // Visual cue si es ghost mode
         if(activeWorkout.ghostUid) {
              document.getElementById('bar-timer').style.color = 'var(--warning-color)';
              document.getElementById('bar-timer').innerText += " (COACH)";
@@ -376,7 +372,6 @@ window.deleteHistoryWorkout = async (id) => {
     try {
         await deleteDoc(doc(db, "workouts", id));
         alert("✅ Entreno eliminado.");
-        // Defensive: Check which view is active to reload correctly
         if (document.getElementById('coach-detail-view').classList.contains('active')) {
              window.openCoachView(selectedUserCoach, selectedUserObj);
         } else {
@@ -573,16 +568,20 @@ window.cancelWorkout = () => {
     } 
 };
 
-// --- GHOST MODE: targetUid permite que el Coach entrene por otro ---
+// --- GHOST MODE & PRE-FILL ---
 window.startWorkout = async (rid, targetUid = null) => {
     if(activeWorkout) { if(!confirm("⚠️ Ya tienes un entreno en curso. ¿Deseas descartarlo e iniciar este nuevo?")) return; }
     if(document.getElementById('cfg-wake').checked && 'wakeLock' in navigator) { try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e) { console.log("WakeLock error", e); } }
     try {
         const snap = await getDoc(doc(db,"routines",rid)); const r = snap.data();
-        // Determine whom we are training
         const effectiveUid = targetUid || currentUser.uid;
         
-        // Find last workout for PREV data
+        let targetPrs = userData.prs || {};
+        if (effectiveUid !== currentUser.uid) {
+            const uSnap = await getDoc(doc(db, "users", effectiveUid));
+            if (uSnap.exists()) targetPrs = uSnap.data().prs || {};
+        }
+
         let lastWorkoutData = null; 
         const q = query(collection(db, "workouts"), where("uid", "==", effectiveUid)); 
         const wSnap = await getDocs(q); 
@@ -593,8 +592,46 @@ window.startWorkout = async (rid, targetUid = null) => {
         activeWorkout = { 
             name: r.name, 
             startTime: now, 
-            ghostUid: targetUid, // Store if this is a coach session
-            exs: r.exercises.map(exObj => { const isString = typeof exObj === 'string'; const name = isString ? exObj : exObj.n; const isSuperset = isString ? false : (exObj.s || false); const customSeriesNum = isString ? 5 : (parseInt(exObj.series) || 5); const customRepsPattern = isString ? "20-16-16-16-16" : (exObj.reps || "20-16-16-16-16"); const repsArray = customRepsPattern.split('-'); const data = getExerciseData(name); let sets = Array(customSeriesNum).fill().map((_, i) => ({ r: repsArray[i] ? parseInt(repsArray[i]) : parseInt(repsArray[repsArray.length - 1]), w: 0, d: false, prev: '-', numDisplay: (i + 1).toString() })); if(lastWorkoutData) { const prevEx = lastWorkoutData.find(ld => ld.n === name); if(prevEx && prevEx.s) { sets = sets.map((s, i) => { if(prevEx.s[i]) { const dLabel = prevEx.s[i].isDrop ? ' (D)' : ''; s.prev = `${prevEx.s[i].r}x${prevEx.s[i].w}kg${dLabel}`; } return s; }); } } return { n:name, img:data.img, mInfo: data.mInfo, type: data.type, video: data.v, sets: sets, superset: isSuperset, note: "" }; }) 
+            ghostUid: targetUid,
+            exs: r.exercises.map(exObj => { 
+                const isString = typeof exObj === 'string'; 
+                const name = isString ? exObj : exObj.n; 
+                const isSuperset = isString ? false : (exObj.s || false); 
+                const customSeriesNum = isString ? 5 : (parseInt(exObj.series) || 5); 
+                const customRepsPattern = isString ? "20-16-16-16-16" : (exObj.reps || "20-16-16-16-16"); 
+                const repsArray = customRepsPattern.split('-'); 
+                const data = getExerciseData(name); 
+                const prWeight = targetPrs[name] || 0;
+
+                let sets = Array(customSeriesNum).fill().map((_, i) => {
+                    let targetReps = repsArray[i] ? parseInt(repsArray[i]) : parseInt(repsArray[repsArray.length - 1]);
+                    let sR = targetReps;
+                    let sW = 0;
+                    let prevStr = '-';
+                    
+                    if(lastWorkoutData) {
+                        const prevEx = lastWorkoutData.find(ld => ld.n === name);
+                        if(prevEx && prevEx.s && prevEx.s[i]) {
+                            sR = parseInt(prevEx.s[i].r) || sR;
+                            sW = parseFloat(prevEx.s[i].w) || sW;
+                            const dLabel = prevEx.s[i].isDrop ? ' (D)' : '';
+                            prevStr = `${sR}x${sW}k${dLabel}`;
+                        }
+                    }
+                    
+                    return { 
+                        r: "", // Empty so it shows placeholder
+                        w: "", // Empty so it shows placeholder
+                        suggestedR: sR,
+                        suggestedW: sW,
+                        d: false, 
+                        prev: prevStr, 
+                        pr: prWeight,
+                        numDisplay: (i + 1).toString() 
+                    }; 
+                });
+                return { n:name, img:data.img, mInfo: data.mInfo, type: data.type, video: data.v, sets: sets, superset: isSuperset, note: "" }; 
+            }) 
         };
         
         saveLocalWorkout(); 
@@ -609,9 +646,39 @@ window.startWorkout = async (rid, targetUid = null) => {
     } catch(e) { console.error(e); alert("Error iniciando entreno: " + e.message); }
 };
 
-window.addSet = (exIdx) => { const sets = activeWorkout.exs[exIdx].sets; sets.push({r:16, w:0, d:false, prev:'-', numDisplay: (sets.length + 1).toString()}); saveLocalWorkout(); renderWorkout(); };
+window.addSet = (exIdx) => { 
+    const ex = activeWorkout.exs[exIdx];
+    const sets = ex.sets; 
+    const lastSet = sets[sets.length - 1];
+    const pr = sets.length > 0 ? sets[0].pr : 0;
+    sets.push({
+        r: "", w: "", 
+        suggestedR: lastSet ? lastSet.suggestedR : 10, 
+        suggestedW: lastSet ? lastSet.suggestedW : 0, 
+        d: false, prev: '-', pr: pr, 
+        numDisplay: (sets.length + 1).toString()
+    }); 
+    saveLocalWorkout(); 
+    renderWorkout(); 
+};
 window.removeSet = (exIdx) => { if(activeWorkout.exs[exIdx].sets.length > 1) { activeWorkout.exs[exIdx].sets.pop(); saveLocalWorkout(); renderWorkout(); } };
-window.toggleAllSets = (exIdx) => { const ex = activeWorkout.exs[exIdx]; const allDone = ex.sets.every(s => s.d); const newState = !allDone; ex.sets.forEach(s => { s.d = newState; }); saveLocalWorkout(); renderWorkout(); if(newState) showToast("✅ Todas las series completadas"); };
+window.toggleAllSets = (exIdx) => { 
+    const ex = activeWorkout.exs[exIdx]; 
+    const allDone = ex.sets.every(s => s.d); 
+    const newState = !allDone; 
+    ex.sets.forEach((s, j) => { 
+        s.d = newState; 
+        if(newState) {
+            const rEl = document.getElementById(`inp-r-${exIdx}-${j}`);
+            const wEl = document.getElementById(`inp-w-${exIdx}-${j}`);
+            if(rEl && rEl.value !== "") s.r = rEl.value; else if(s.r === "") s.r = s.suggestedR || 0;
+            if(wEl && wEl.value !== "") s.w = wEl.value; else if(s.w === "") s.w = s.suggestedW || 0;
+        }
+    }); 
+    saveLocalWorkout(); 
+    renderWorkout(); 
+    if(newState) showToast("✅ Todas las series completadas"); 
+};
 window.openNoteModal = (idx) => { noteTargetIndex = idx; const existingNote = activeWorkout.exs[idx].note || ""; document.getElementById('exercise-note-input').value = existingNote; window.openModal('modal-note'); };
 window.saveNote = () => { if (noteTargetIndex === null) return; const txt = document.getElementById('exercise-note-input').value.trim(); activeWorkout.exs[noteTargetIndex].note = txt; saveLocalWorkout(); renderWorkout(); window.closeModal('modal-note'); showToast(txt ? "📝 Nota guardada" : "🗑️ Nota borrada"); };
 window.toggleRankingOptIn = async (val) => { try { await updateDoc(doc(db, "users", currentUser.uid), { rankingOptIn: val }); userData.rankingOptIn = val; const btnRank = document.getElementById('top-btn-ranking'); if(val) btnRank.classList.remove('hidden'); else btnRank.classList.add('hidden'); showToast(val ? "🏆 Ahora participas en el Ranking" : "👻 Ranking desactivado"); } catch(e) { alert("Error actualizando perfil"); } };
@@ -655,11 +722,31 @@ function renderWorkout() {
         const swapBtn = `<button class="btn-small btn-outline" style="float:right; width:auto; margin:0 5px 0 0; padding:2px 8px; border-color:#aaa; color:#fff;" onclick="window.initSwap(${i})">🔄</button>`;
         const hasNote = e.note && e.note.length > 0; const noteBtn = `<button class="ex-note-btn ${hasNote ? 'has-note' : ''}" onclick="window.openNoteModal(${i})">📝</button>`;
         let bars = (e.type === 'i') ? `<div class="mini-bar-label"><span>${e.mInfo.main}</span><span>100%</span></div><div class="mini-track"><div class="mini-fill fill-primary"></div></div>` : `<div class="mini-bar-label"><span>${e.mInfo.main}</span><span>70%</span></div><div class="mini-track"><div class="mini-fill fill-primary" style="width:70%"></div></div>`;
-        let setsHtml = `<div class="set-header"><div>#</div><div>PREV</div><div>REPS</div><div>KG</div><div></div></div>`;
+        let setsHtml = `<div class="set-header"><div>#</div><div>PREV / PR</div><div>REPS</div><div>KG</div><div></div></div>`;
+        
         e.sets.forEach((s, j) => { 
-            const weightVal = s.w === 0 ? '' : s.w; const isDisabled = s.d ? 'disabled' : ''; const rowOpacity = s.d ? 'opacity:0.5; pointer-events:none;' : ''; const isDropClass = s.isDrop ? 'is-dropset' : ''; const displayNum = s.numDisplay || (j + 1);
+            const suggR = s.suggestedR !== undefined ? s.suggestedR : (s.r || 0);
+            const suggW = s.suggestedW !== undefined ? s.suggestedW : (s.w || 0);
+            const prWeight = s.pr || 0;
+            const repsVal = (s.r === "" || s.r === undefined) ? "" : s.r;
+            const weightVal = (s.w === "" || s.w === undefined) ? "" : s.w; 
+            
+            const isDisabled = s.d ? 'disabled' : ''; const rowOpacity = s.d ? 'opacity:0.5; pointer-events:none;' : ''; const isDropClass = s.isDrop ? 'is-dropset' : ''; const displayNum = s.numDisplay || (j + 1);
             let dropActionBtn = !s.d ? (s.isDrop ? `<button class="btn-small btn-outline" style="padding:2px 6px; font-size:0.7rem; border-color:#f55; color:#f55; margin-left:auto;" onclick="window.removeSpecificSet(${i},${j})">✕</button>` : `<button class="btn-small btn-outline" style="padding:2px; font-size:0.5rem; border-color:var(--warning-color); color:var(--warning-color);" onclick="window.addDropset(${i},${j})">DROP</button>`) : '';
-            setsHtml += `<div class="set-row ${isDropClass}" style="${rowOpacity}"><div class="set-num" style="${s.isDrop ? 'color:var(--warning-color); font-size:0.7rem;' : ''}">${displayNum}</div><div class="prev-data">${s.prev}</div><div><input type="number" value="${s.r}" ${isDisabled} onchange="uS(${i},${j},'r',this.value)"></div><div><input type="number" placeholder="kg" value="${weightVal}" ${isDisabled} onchange="uS(${i},${j},'w',this.value)"></div><div style="display:flex; flex-direction:column; gap:2px; pointer-events: auto; align-items:center;"><button id="btn-${i}-${j}" class="btn-outline ${s.d ? 'btn-done' : ''}" style="margin:0;padding:0;height:32px;width:100%;" onclick="tS(${i},${j})">${s.d ? '✓' : ''}</button>${dropActionBtn}</div></div>`; 
+            
+            setsHtml += `<div class="set-row ${isDropClass}" style="${rowOpacity}">
+                <div class="set-num" style="${s.isDrop ? 'color:var(--warning-color); font-size:0.7rem;' : ''}">${displayNum}</div>
+                <div class="prev-data">
+                    <div style="font-weight:bold; color:#ccc;">${s.prev}</div>
+                    <div style="font-size:0.55rem; color:var(--warning-color); font-family:var(--font-sport);">🏆 ${prWeight}k</div>
+                </div>
+                <div><input type="number" id="inp-r-${i}-${j}" placeholder="${suggR}" value="${repsVal}" ${isDisabled} onchange="uS(${i},${j},'r',this.value)"></div>
+                <div><input type="number" id="inp-w-${i}-${j}" placeholder="${suggW}" value="${weightVal}" ${isDisabled} onchange="uS(${i},${j},'w',this.value)"></div>
+                <div style="display:flex; flex-direction:column; gap:2px; pointer-events: auto; align-items:center;">
+                    <button id="btn-${i}-${j}" class="btn-outline ${s.d ? 'btn-done' : ''}" style="margin:0;padding:0;height:32px;width:100%;" onclick="tS(${i},${j})">${s.d ? '✓' : ''}</button>
+                    ${dropActionBtn}
+                </div>
+            </div>`; 
         });
         setsHtml += `<div class="sets-actions"><button class="btn-set-control" style="border-color:var(--success-color); color:var(--success-color); margin-right:auto;" onclick="window.toggleAllSets(${i})">✓ TODO</button><button class="btn-set-control" onclick="removeSet(${i})">- Serie</button><button class="btn-set-control" onclick="addSet(${i})">+ Serie</button></div>`;
         card.innerHTML = `<div class="workout-split"><div class="workout-visual"><img src="${e.img}" onerror="this.src='logo.png'"></div><div class="workout-bars" style="width:100%">${bars}</div></div><h3 style="margin-bottom:10px; border:none; display:flex; align-items:center; justify-content:space-between;"><span>${e.n}</span><div>${noteBtn} ${videoBtnHtml} ${swapBtn}</div></h3>${setsHtml}`;
@@ -667,9 +754,72 @@ function renderWorkout() {
     });
 }
 window.removeSpecificSet = (exIdx, setIdx) => { if(activeWorkout.exs[exIdx].sets.length > 1) { activeWorkout.exs[exIdx].sets.splice(setIdx, 1); saveLocalWorkout(); renderWorkout(); } };
-window.addDropset = (exIdx, setIdx) => { const currentSet = activeWorkout.exs[exIdx].sets[setIdx]; currentSet.d = true; const newSet = { r: Math.floor(currentSet.r * 0.8) || 10, w: Math.floor(currentSet.w * 0.7) || 0, d: false, prev: 'DROPSET', isDrop: true, numDisplay: (parseInt(currentSet.numDisplay) || (setIdx + 1)) + ".5" }; activeWorkout.exs[exIdx].sets.splice(setIdx + 1, 0, newSet); saveLocalWorkout(); renderWorkout(); };
+window.addDropset = (exIdx, setIdx) => { 
+    const currentSet = activeWorkout.exs[exIdx].sets[setIdx]; 
+    currentSet.d = true; 
+    if (currentSet.r === "") currentSet.r = currentSet.suggestedR || 0;
+    if (currentSet.w === "") currentSet.w = currentSet.suggestedW || 0;
+
+    const newSet = { 
+        r: "", w: "", 
+        suggestedR: Math.floor(currentSet.r * 0.8) || 10, 
+        suggestedW: Math.floor(currentSet.w * 0.7) || 0, 
+        d: false, prev: 'DROPSET', pr: currentSet.pr, isDrop: true, 
+        numDisplay: (parseInt(currentSet.numDisplay) || (setIdx + 1)) + ".5" 
+    }; 
+    activeWorkout.exs[exIdx].sets.splice(setIdx + 1, 0, newSet); 
+    saveLocalWorkout(); 
+    renderWorkout(); 
+};
 window.uS = (i,j,k,v) => { activeWorkout.exs[i].sets[j][k]=v; saveLocalWorkout(); };
-window.tS = async (i, j) => { const s = activeWorkout.exs[i].sets[j]; const exerciseName = activeWorkout.exs[i].n; s.d = !s.d; if(s.d) { const weight = parseFloat(s.w) || 0; const reps = parseInt(s.r) || 0; if (weight > 0 && reps > 0) { const estimated1RM = Math.round(weight / (1.0278 - (0.0278 * reps))); if (!userData.rmRecords) userData.rmRecords = {}; const currentRecord = userData.rmRecords[exerciseName] || 0; if (estimated1RM > currentRecord) { userData.rmRecords[exerciseName] = estimated1RM; updateDoc(doc(db, "users", currentUser.uid), { [`rmRecords.${exerciseName}`]: estimated1RM }); if(typeof confetti === 'function') { confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#00ff88', '#ffffff'] }); } showToast(`🔥 ¡NUEVO NIVEL! 1RM: <b>${estimated1RM}kg</b>`); } else { const currentWeightPR = userData.prs ? (userData.prs[exerciseName] || 0) : 0; if (weight > currentWeightPR) { if(!userData.prs) userData.prs = {}; userData.prs[exerciseName] = weight; const newPrCount = (userData.stats.prCount || 0) + 1; updateDoc(doc(db, "users", currentUser.uid), { [`prs.${exerciseName}`]: weight, "stats.prCount": newPrCount }); userData.stats.prCount = newPrCount; showToast(`💪 Peso Máximo Superado: ${weight}kg`); } } } openRest(); } saveLocalWorkout(); renderWorkout(); };
+
+window.tS = async (i, j) => { 
+    const s = activeWorkout.exs[i].sets[j]; 
+    const exerciseName = activeWorkout.exs[i].n; 
+    s.d = !s.d; 
+    
+    if(s.d) { 
+        // 1. Lee inputs directamente por si el onchange no disparó
+        const rEl = document.getElementById(`inp-r-${i}-${j}`);
+        const wEl = document.getElementById(`inp-w-${i}-${j}`);
+        
+        if (rEl && rEl.value !== "") s.r = rEl.value; 
+        else if (s.r === "") s.r = s.suggestedR || 0;
+
+        if (wEl && wEl.value !== "") s.w = wEl.value; 
+        else if (s.w === "") s.w = s.suggestedW || 0;
+
+        const weight = parseFloat(s.w) || 0; 
+        const reps = parseInt(s.r) || 0; 
+        
+        // 2. Comprobar PRs
+        if (weight > 0 && reps > 0) { 
+            const estimated1RM = Math.round(weight / (1.0278 - (0.0278 * reps))); 
+            if (!userData.rmRecords) userData.rmRecords = {}; 
+            const currentRecord = userData.rmRecords[exerciseName] || 0; 
+            if (estimated1RM > currentRecord) { 
+                userData.rmRecords[exerciseName] = estimated1RM; 
+                updateDoc(doc(db, "users", currentUser.uid), { [`rmRecords.${exerciseName}`]: estimated1RM }); 
+                if(typeof confetti === 'function') { confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#00ff88', '#ffffff'] }); } 
+                showToast(`🔥 ¡NUEVO NIVEL! 1RM: <b>${estimated1RM}kg</b>`); 
+            } else { 
+                const currentWeightPR = userData.prs ? (userData.prs[exerciseName] || 0) : 0; 
+                if (weight > currentWeightPR) { 
+                    if(!userData.prs) userData.prs = {}; 
+                    userData.prs[exerciseName] = weight; 
+                    const newPrCount = (userData.stats.prCount || 0) + 1; 
+                    updateDoc(doc(db, "users", currentUser.uid), { [`prs.${exerciseName}`]: weight, "stats.prCount": newPrCount }); 
+                    userData.stats.prCount = newPrCount; 
+                    showToast(`💪 Peso Máximo Superado: ${weight}kg`); 
+                } 
+            } 
+        } 
+        openRest(); 
+    } 
+    saveLocalWorkout(); 
+    renderWorkout(); 
+};
+
 window.requestNotifPermission = () => { if ("Notification" in window) { Notification.requestPermission().then(p => { if(p === 'granted') showToast("✅ Notificaciones activadas"); else showToast("❌ Permiso denegado"); }); } else { showToast("⚠️ Tu navegador no soporta notificaciones"); } };
 function updateTimerVisuals(timeLeft) { const display = document.getElementById('timer-display'); const ring = document.getElementById('timer-progress-ring'); if(display) { display.innerText = timeLeft; display.style.color = timeLeft <= 5 ? "#fff" : "var(--accent-color)"; display.style.textShadow = timeLeft <= 5 ? "0 0 20px #fff" : "none"; } if(ring) { const circumference = 565; const offset = circumference - (timeLeft / totalRestTime) * circumference; ring.style.strokeDashoffset = offset; ring.style.stroke = "var(--accent-color)"; if (timeLeft <= 0) ring.style.stroke = "#ffffff"; } }
 function openRest() { window.openModal('modal-timer'); initAudioEngine(); let duration = parseInt(userData.restTime) || 60; totalRestTime = duration; restEndTime = Date.now() + (duration * 1000); lastBeepSecond = -1; updateTimerVisuals(duration); if(timerInt) clearInterval(timerInt); timerInt = setInterval(() => { const now = Date.now(); const leftMs = restEndTime - now; const leftSec = Math.ceil(leftMs / 1000); if (leftSec >= 0) { updateTimerVisuals(leftSec); } if (leftSec <= 5 && leftSec > 0) { if (leftSec !== lastBeepSecond) { playTickSound(false); lastBeepSecond = leftSec; } } if (leftSec <= 0) { window.closeTimer(); playTickSound(true); if ("Notification" in window && Notification.permission === "granted") { try { new Notification("¡A LA SERIE!", { body: "Descanso finalizado.", icon: "logo.png" }); } catch(e) {} } } }, 250); }
@@ -713,10 +863,8 @@ window.finishWorkout = async (rpeVal) => {
         const s = Math.floor((durationMs % 60000) / 1000); 
         const durationStr = h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`; 
         
-        // GHOST MODE: Guardar en UID del cliente si es necesario
         const finalUid = activeWorkout.ghostUid || currentUser.uid;
         
-        // Obtenemos stats actuales del usuario destino (si es cliente)
         let targetStats = userData.stats;
         let targetPrs = userData.prs;
         if(activeWorkout.ghostUid) {
@@ -756,9 +904,7 @@ window.finishWorkout = async (rpeVal) => {
         if (durationInt) clearInterval(durationInt); 
         if (wakeLock) { await wakeLock.release(); wakeLock = null; } 
         
-        // Redirigir según el modo
         if(finalUid !== currentUser.uid) {
-             // Si era modo coach, volver a vista coach refrescada
              window.openCoachView(finalUid, selectedUserObj);
         } else {
              window.switchTab('routines-view'); 
@@ -812,13 +958,9 @@ function renderAdminList(usersList) {
         const div = document.createElement('div'); 
         div.className = rowClass; 
         
-        // --- AQUÍ ESTÁ EL CAMBIO PARA EL ROJO ---
         if(u.id === currentUser.uid) {
-            // Sobreescribimos el borde a ROJO y un fondo rojizo suave
-            div.style.borderColor = "#ff3333"; 
-            div.style.backgroundColor = "rgba(255, 51, 51, 0.1)"; 
+            div.style.cssText = "border-left: 3px solid #ff3333 !important; background: rgba(255, 51, 51, 0.1) !important;"; 
         }
-        // ----------------------------------------
 
         div.innerHTML=`${avatarHtml}<div style="overflow:hidden;"><div style="font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:white; display:flex; align-items:center;">${u.name} ${u.role === 'assistant' ? '🛡️' : ''}</div><div style="font-size:0.75rem; color:#888; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${u.email}</div></div><div style="display:flex; gap:8px;">${btnNotice}<button class="btn-outline btn-small" style="margin:0; border-color:#444; color:#ccc;" onclick="window.openCoachView('${u.id}', null)">⚙️</button></div>`; 
         l.appendChild(div); 
@@ -838,17 +980,14 @@ window.viewWorkoutDetails = (wId, routineName, detailsStr, noteStr, timeStr = ""
 function renderHistoryHTML(details) { let html = ''; details.forEach((ex, exIdx) => { const name = ex.n || ex; const sets = ex.s || []; const exNoteHtml = ex.note ? `<div style="font-size:0.75rem; color:#aaa; font-style:italic; margin-top:5px; padding:4px; border-left:2px solid #555; background:#111;">📝 ${ex.note}</div>` : ''; html += `<div class="detail-exercise-card"><div class="detail-exercise-title">${name}</div>${exNoteHtml}<div class="detail-sets-grid" id="hist-grid-${exIdx}">`; if (sets.length > 0) { sets.forEach((s, i) => { const num = s.numDisplay || (i + 1); const w = s.w || 0; const r = s.r || 0; const dropStyle = s.isDrop ? 'border: 1px solid var(--warning-color); background: rgba(255, 170, 0, 0.15);' : ''; html += `<div class="detail-set-badge history-set-item" style="${dropStyle}" data-ex="${exIdx}" data-set="${i}"><br><span class="detail-set-num">#${num}</span><br><span class="set-view"><b>${r}</b> <span style="color:#666">x</span> ${w}k</span><br></div>`; }); } else { html += `<div style="font-size:0.7rem; color:#666;">Sin datos.</div>`; } html += `</div></div>`; }); return html; }
 
 window.enableHistoryEdit = () => { 
-    // Reemplaza texto por inputs y añade botón para nueva serie
     const grids = document.querySelectorAll('.detail-sets-grid');
     grids.forEach((grid, exIdx) => {
-        // Añadir inputs a las existentes
         const items = grid.querySelectorAll('.history-set-item');
         items.forEach(item => {
             const setIdx = item.getAttribute('data-set');
             const setObj = currentHistoryDetails[exIdx].s[setIdx];
             item.innerHTML = `<br><div style="display:flex; gap:5px; align-items:center;"><br><input type="number" class="hist-edit-reps" value="${setObj.r}" style="width:40px; padding:2px; margin:0; text-align:center; background:#000; border:1px solid #444;" inputmode="decimal"><br><span style="color:#666">x</span><br><input type="number" class="hist-edit-weight" value="${setObj.w}" style="width:40px; padding:2px; margin:0; text-align:center; background:#000; border:1px solid #444;" inputmode="decimal"><br></div><br>`;
         });
-        // Botón añadir serie
         if(!grid.querySelector('.btn-add-hist-set')) {
              const addBtn = document.createElement('button');
              addBtn.className = 'btn-small btn-outline btn-add-hist-set';
@@ -862,16 +1001,10 @@ window.enableHistoryEdit = () => {
     document.getElementById('btn-save-history').classList.remove('hidden'); 
 };
 
-// Nueva función para añadir series al historial
 window.addHistorySet = (exIdx) => {
-    // 1. Guardar estado actual de los inputs antes de redibujar
     syncHistoryInputsState();
-    
-    // 2. Añadir nueva serie al modelo
     const newSet = { r: 0, w: 0, numDisplay: (currentHistoryDetails[exIdx].s.length + 1).toString() };
     currentHistoryDetails[exIdx].s.push(newSet);
-    
-    // 3. Redibujar y reactivar edición
     const container = document.getElementById('history-details-container');
     container.innerHTML = `<br>${renderHistoryHTML(currentHistoryDetails)}<br>`;
     window.enableHistoryEdit();
@@ -892,7 +1025,7 @@ function syncHistoryInputsState() {
 }
 
 window.saveHistoryChanges = async () => { 
-    syncHistoryInputsState(); // Asegurar últimos datos
+    syncHistoryInputsState(); 
     try { 
         const btn = document.getElementById('btn-save-history'); 
         btn.innerText = "⏳ GUARDANDO..."; 
@@ -963,7 +1096,6 @@ window.openCoachView = async (uid, u) => {
     rList.innerHTML = assigned.length ? '' : 'Ninguna rutina.'; 
     assigned.forEach(r => { 
         const div = document.createElement('div'); div.className = "assigned-routine-item"; 
-        // BOTÓN MODO ENTRENADOR
         const btnGhost = `<button class="btn-small btn" style="margin:0; width:auto; font-size:0.7rem; background:var(--accent-color); color:#000; margin-right:10px;" onclick="window.startWorkout('${r.id}', '${uid}')">▶️ 🏋🏻‍♂️</button>`;
         div.innerHTML = `<span>${r.name}</span><div style="display:flex;align-items:center;">${btnGhost}<button style="background:none;border:none;color:#f55;font-weight:bold;cursor:pointer;" onclick="window.unassignRoutine('${r.id}')">❌</button></div>`; 
         rList.appendChild(div); 
@@ -980,7 +1112,6 @@ window.openCoachView = async (uid, u) => {
     wSnap.docs.map(doc => ({id: doc.id, ...doc.data()})).sort((a,b) => b.date - a.date).slice(0, 10).forEach(d => { 
         let date = '-', infoStr = ''; 
         if(d.date) { const dObj = d.date.seconds ? new Date(d.date.seconds*1000) : d.date.toDate(); date = dObj.toLocaleDateString(); infoStr = d.duration ? `⏱️ ${d.duration}` : dObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); } 
-        // BOTÓN BORRAR EN HISTORIAL COACH
         const btnDelete = `<button class="btn-small btn-danger" style="margin:0 5px;" onclick="window.deleteHistoryWorkout('${d.id}')">🗑️</button>`;
         hList.innerHTML += `<div class="history-row" style="grid-template-columns: 60px 1fr 30px 110px;"><div>${date}</div><div style="overflow:hidden; text-overflow:ellipsis;">${d.routine}</div><div>${d.rpe === 'Suave' ? '🟢' : (d.rpe === 'Duro' ? '🟠' : '🔴')}</div><div style="text-align:right;"><button class="btn-small btn-outline" onclick="viewWorkoutDetails('${d.id}', '${d.routine}', '${encodeURIComponent(JSON.stringify(d.details))}', '${encodeURIComponent(d.note||"")}', '${infoStr}')">Ver</button>${btnDelete}</div></div>`; 
     }); 
