@@ -666,17 +666,68 @@ window.loadRankingView = async () => {
     try {
         const cacheKey = `rank_cache_${rankFilterTime}_${rankFilterGender}_${rankFilterCat}`; const todayStr = new Date().toDateString(); const cachedRaw = localStorage.getItem(cacheKey); let useCache = false; let rankingData = [];
         if (cachedRaw) { const cachedObj = JSON.parse(cachedRaw); if (cachedObj.date === todayStr) { rankingData = cachedObj.data; useCache = true; } }
+        
         if (!useCache) {
             list.innerHTML = '<div style="text-align:center; margin-top:50px; color:var(--accent-color);">↻ Actualizando tabla diaria...</div>'; let orderByField = "", collectionField = "";
             if (rankFilterCat === 'kg') collectionField = "kg"; else if (rankFilterCat === 'workouts') collectionField = "workouts"; else if (rankFilterCat === 'reps') collectionField = "reps"; else if (rankFilterCat === 'sets') collectionField = "sets"; else if (rankFilterCat === 'prs') collectionField = "prCount";
-            if (rankFilterTime === 'all') { if (rankFilterCat === 'kg') orderByField = "stats.totalKg"; else if (rankFilterCat === 'workouts') orderByField = "stats.workouts"; else if (rankFilterCat === 'reps') orderByField = "stats.totalReps"; else if (rankFilterCat === 'sets') orderByField = "stats.totalSets"; else if (rankFilterCat === 'prs') orderByField = "stats.prCount"; } else { const now = new Date(); let timeKey = ""; if(rankFilterTime === 'week') timeKey = `week_${getWeekNumber(now)}`; if(rankFilterTime === 'month') timeKey = `month_${now.getFullYear()}_${now.getMonth()}`; if(rankFilterTime === 'year') timeKey = `year_${now.getFullYear()}`; if (rankFilterCat === 'prs') { list.innerHTML = "<div class='tip-box'>🏆 Los Récords solo se contabilizan en el Ranking Histórico.</div>"; return; } orderByField = `stats_${timeKey}.${collectionField}`; }
-            let q = query(collection(db, "users"), where("rankingOptIn", "==", true), orderBy(orderByField, "desc"), limit(50));
-            if (rankFilterGender !== 'all') { q = query(collection(db, "users"), where("rankingOptIn", "==", true), where("gender", "==", rankFilterGender), orderBy(orderByField, "desc"), limit(50)); }
-            const snap = await getDocs(q); if(snap.empty) { list.innerHTML = "<div class='tip-box'>No hay datos para este periodo/filtro todavía.</div>"; return; }
-            rankingData = []; snap.forEach(d => { const u = d.data(); let rawValue = 0; if (rankFilterTime === 'all') { const fieldName = orderByField.split('.')[1]; rawValue = u.stats ? u.stats[fieldName] : 0; } else { const rootKey = orderByField.split('.')[0]; const subKey = orderByField.split('.')[1]; rawValue = (u[rootKey] && u[rootKey][subKey]) ? u[rootKey][subKey] : 0; } rankingData.push({ id: d.id, name: u.name, photo: u.photo, workouts: u.stats?.workouts || 0, value: rawValue }); });
+            
+            if (rankFilterTime === 'all') { 
+                if (rankFilterCat === 'kg') orderByField = "stats.totalKg"; else if (rankFilterCat === 'workouts') orderByField = "stats.workouts"; else if (rankFilterCat === 'reps') orderByField = "stats.totalReps"; else if (rankFilterCat === 'sets') orderByField = "stats.totalSets"; else if (rankFilterCat === 'prs') orderByField = "stats.prCount"; 
+            } else { 
+                const now = new Date(); let timeKey = ""; 
+                if(rankFilterTime === 'week') timeKey = `week_${getWeekNumber(now)}`; 
+                if(rankFilterTime === 'month') timeKey = `month_${now.getFullYear()}_${now.getMonth()}`; 
+                if(rankFilterTime === 'year') timeKey = `year_${now.getFullYear()}`; 
+                if (rankFilterCat === 'prs') { list.innerHTML = "<div class='tip-box'>🏆 Los Récords solo se contabilizan en el Ranking Histórico.</div>"; return; } 
+                orderByField = `stats_${timeKey}.${collectionField}`; 
+            }
+            
+            // 🚀 TRUCO SENIOR: Solo usamos orderBy. Firebase tiene índices automáticos para esto.
+            // Pedimos 150 documentos para tener margen suficiente tras filtrar en memoria.
+            let q = query(collection(db, "users"), orderBy(orderByField, "desc"), limit(150));
+            const snap = await getDocs(q); 
+            
+            if(snap.empty) { list.innerHTML = "<div class='tip-box'>No hay datos para este periodo/filtro todavía.</div>"; return; }
+            
+            rankingData = []; 
+            snap.forEach(d => { 
+                const u = d.data(); 
+                
+                // 🚀 FILTRO EN MEMORIA: Descartamos a los que no quieren participar o no son del género seleccionado.
+                // Esto evita bloqueos de Firebase por falta de índices compuestos.
+                if (u.rankingOptIn !== true) return;
+                if (rankFilterGender !== 'all' && u.gender !== rankFilterGender) return;
+
+                let rawValue = 0; 
+                if (rankFilterTime === 'all') { 
+                    const fieldName = orderByField.split('.')[1]; rawValue = u.stats ? u.stats[fieldName] : 0; 
+                } else { 
+                    const rootKey = orderByField.split('.')[0]; const subKey = orderByField.split('.')[1]; rawValue = (u[rootKey] && u[rootKey][subKey]) ? u[rootKey][subKey] : 0; 
+                } 
+                rankingData.push({ id: d.id, name: u.name, photo: u.photo, workouts: u.stats?.workouts || 0, value: rawValue }); 
+            });
+            
+            // 🚀 Cortamos el array para mostrar solo a los 50 mejores tras el filtro
+            rankingData = rankingData.slice(0, 50);
+
             try { localStorage.setItem(cacheKey, JSON.stringify({ date: todayStr, data: rankingData })); } catch (err) {}
         }
-        list.innerHTML = ""; let rank = 1; rankingData.forEach(u => { const isMe = u.id === currentUser.uid; let displayValue = u.value; if(rankFilterCat === 'kg') displayValue = (u.value / 1000).toFixed(1) + 't'; else if(rankFilterCat === 'prs') displayValue = u.value + ' 🏆'; else displayValue = u.value.toLocaleString(); let posClass = ""; if(rank === 1) posClass = "ranking-1"; if(rank === 2) posClass = "ranking-2"; if(rank === 3) posClass = "ranking-3"; const avatarHtml = u.photo ? `<img src="${u.photo}" class="mini-avatar" style="width:35px;height:35px;">` : `<div class="mini-avatar-placeholder" style="width:35px;height:35px;font-size:0.8rem;">${u.name.charAt(0).toUpperCase()}</div>`; const div = document.createElement('div'); div.className = "ranking-row"; if(isMe) div.style.borderColor = "var(--accent-color)"; div.innerHTML = `<div class="ranking-pos ${posClass}">#${rank}</div><div style="margin-right:10px;">${avatarHtml}</div><div style="flex:1;"><div style="font-weight:bold; color:${isMe ? 'var(--accent-color)' : 'white'}">${u.name}</div><div style="font-size:0.65rem; color:#666;">${u.workouts} entrenos</div></div><div class="rank-value-highlight">${displayValue}</div>`; list.appendChild(div); rank++; });
+        
+        list.innerHTML = ""; let rank = 1; 
+        if (rankingData.length === 0) { list.innerHTML = "<div class='tip-box'>No hay usuarios visibles en este filtro.</div>"; return; }
+
+        rankingData.forEach(u => { 
+            const isMe = u.id === currentUser.uid; let displayValue = u.value; 
+            if(rankFilterCat === 'kg') displayValue = (u.value / 1000).toFixed(1) + 't'; 
+            else if(rankFilterCat === 'prs') displayValue = u.value + ' 🏆'; 
+            else displayValue = u.value.toLocaleString(); 
+            let posClass = ""; if(rank === 1) posClass = "ranking-1"; if(rank === 2) posClass = "ranking-2"; if(rank === 3) posClass = "ranking-3"; 
+            const avatarHtml = u.photo ? `<img src="${u.photo}" class="mini-avatar" style="width:35px;height:35px;">` : `<div class="mini-avatar-placeholder" style="width:35px;height:35px;font-size:0.8rem;">${u.name.charAt(0).toUpperCase()}</div>`; 
+            const div = document.createElement('div'); div.className = "ranking-row"; if(isMe) div.style.borderColor = "var(--accent-color)"; 
+            div.innerHTML = `<div class="ranking-pos ${posClass}">#${rank}</div><div style="margin-right:10px;">${avatarHtml}</div><div style="flex:1;"><div style="font-weight:bold; color:${isMe ? 'var(--accent-color)' : 'white'}">${u.name}</div><div style="font-size:0.65rem; color:#666;">${u.workouts} entrenos</div></div><div class="rank-value-highlight">${displayValue}</div>`; 
+            list.appendChild(div); rank++; 
+        });
+        
         if(useCache) { const advice = document.createElement('div'); advice.className = 'tip-box'; advice.style.fontSize = '0.6rem'; advice.style.marginTop = '10px'; advice.style.opacity = '0.7'; advice.innerHTML = "📊 Datos actualizados de hoy. El ranking se recalculará mañana."; list.appendChild(advice); }
     } catch(e) { console.error("Rank Error:", e); list.innerHTML = `<div style="text-align:center; color:#666;">Error.<br><small>${e.message}</small></div>`; }
 };
