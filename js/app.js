@@ -695,14 +695,22 @@ function renderWorkout() {
         const hasNote = e.note && e.note.length > 0; const noteBtn = `<button class="ex-note-btn ${hasNote ? 'has-note' : ''}" onclick="window.openNoteModal(${i})">📝</button>`;
         let bars = (e.type === 'i') ? `<div class="mini-bar-label"><span>${e.mInfo.main}</span><span>100%</span></div><div class="mini-track"><div class="mini-fill fill-primary"></div></div>` : `<div class="mini-bar-label"><span>${e.mInfo.main}</span><span>70%</span></div><div class="mini-track"><div class="mini-fill fill-primary" style="width:70%"></div></div>`;
         
-        let setsHtml = `<div class="set-header"><div>#</div><div>HISTORIAL</div><div>REPS</div><div>KG</div><div></div></div>`;
+        // 1. Cambiado HISTORIAL a PREV
+        let setsHtml = `<div class="set-header"><div>#</div><div>PREV</div><div>REPS</div><div>KG</div><div></div></div>`;
         e.sets.forEach((s, j) => { 
             const weightVal = s.w === 0 ? '' : s.w; const isDisabled = s.d ? 'disabled' : ''; const rowOpacity = s.d ? 'opacity:0.5; pointer-events:none;' : ''; const isDropClass = s.isDrop ? 'is-dropset' : ''; const displayNum = s.numDisplay || (j + 1);
             let dropActionBtn = !s.d ? (s.isDrop ? `<button class="btn-small btn-outline" style="padding:2px 6px; font-size:0.7rem; border-color:#f55; color:#f55; margin-left:auto;" onclick="window.removeSpecificSet(${i},${j})">✕</button>` : `<button class="btn-small btn-outline" style="padding:2px; font-size:0.5rem; border-color:var(--warning-color); color:var(--warning-color);" onclick="window.addDropset(${i},${j})">DROP</button>`) : '';
             
-            const prevText = s.prev !== '-' ? `Últ: ${s.prev}` : '-';
+            // 2. Quitamos la palabra "Últ:" para ahorrar espacio
+            const prevText = s.prev !== '-' ? s.prev : '-';
             const maxText = s.maxKg !== '-' ? `Máx: ${s.maxKg}kg` : '';
-            const histHtml = `<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.2; width:100%; overflow:hidden;"><span style="font-size:0.65rem; color:#888; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; max-width:100%;">${prevText}</span><span style="font-size:0.6rem; color:var(--accent-color); font-weight:bold; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; max-width:100%;">${maxText}</span></div>`;
+            
+            // 3. Aplicamos el color rojo (accent-color) y el destello (accent-glow) al máximo
+            const histHtml = `<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.2; width:100%; overflow:hidden;">
+                <span style="font-size:0.65rem; color:var(--accent-color); font-family:monospace; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; max-width:100%; opacity:0.85;">${prevText}</span>
+                <span style="font-size:0.6rem; color:var(--accent-color); font-weight:bold; text-shadow:var(--accent-glow); white-space:nowrap; text-overflow:ellipsis; overflow:hidden; max-width:100%; margin-top:2px;">${maxText}</span>
+            </div>`;
+            
             const kgPlaceholder = s.prevKg !== '-' ? s.prevKg : 'kg';
 
             setsHtml += `<div class="set-row ${isDropClass}" style="${rowOpacity}"><div class="set-num" style="${s.isDrop ? 'color:var(--warning-color); font-size:0.7rem;' : ''}">${displayNum}</div>${histHtml}<div><input type="number" value="${s.r}" ${isDisabled} onchange="uS(${i},${j},'r',this.value)" inputmode="decimal" pattern="[0-9]*"></div><div><input type="number" class="kg-input-placeholder" placeholder="${kgPlaceholder}" value="${weightVal}" ${isDisabled} onchange="uS(${i},${j},'w',this.value)" inputmode="decimal" pattern="[0-9]*"></div><div style="display:flex; flex-direction:column; gap:2px; pointer-events: auto; align-items:center;"><button id="btn-${i}-${j}" class="btn-outline ${s.d ? 'btn-done' : ''}" style="margin:0;padding:0;height:32px;width:100%;" onclick="tS(${i},${j})">${s.d ? '✓' : ''}</button>${dropActionBtn}</div></div>`; 
