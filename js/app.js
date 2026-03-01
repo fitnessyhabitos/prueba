@@ -766,10 +766,27 @@ function renderWorkout() {
             setsHtml += `<div class="set-row ${isDropClass}" style="${rowOpacity}"><div class="set-num" style="${s.isDrop ? 'color:var(--warning-color); font-size:0.7rem;' : ''}">${displayNum}</div>${histHtml}<div><input type="number" value="${s.r}" ${isDisabled} onchange="uS(${i},${j},'r',this.value)" inputmode="decimal" pattern="[0-9]*"></div><div><input type="number" class="kg-input-placeholder" placeholder="${kgPlaceholder}" value="${weightVal}" ${isDisabled} onchange="uS(${i},${j},'w',this.value)" inputmode="decimal" pattern="[0-9]*"></div><div style="display:flex; flex-direction:column; gap:2px; pointer-events: auto; align-items:center;"><button id="btn-${i}-${j}" class="btn-outline ${s.d ? 'btn-done' : ''}" style="margin:0;padding:0;height:32px;width:100%;" onclick="tS(${i},${j})">${s.d ? '✓' : ''}</button>${dropActionBtn}</div></div>`; 
         });
         setsHtml += `<div class="sets-actions"><button class="btn-set-control" style="border-color:var(--success-color); color:var(--success-color); margin-right:auto;" onclick="window.toggleAllSets(${i})">✓ TODO</button><button class="btn-set-control" onclick="removeSet(${i})">- Serie</button><button class="btn-set-control" onclick="addSet(${i})">+ Serie</button></div>`;
-        card.innerHTML = `<div class="workout-split"><div class="workout-visual"><img src="${e.img}" onerror="this.src='logo.png'"></div><div class="workout-bars" style="width:100%">${bars}</div></div><h3 style="margin-bottom:10px; border:none; display:flex; align-items:center; justify-content:space-between;"><span>${e.n}</span><div>${noteBtn} ${videoBtnHtml} ${swapBtn}</div></h3>${setsHtml}`;
+        
+        const isCollapsed = e.collapsed === undefined ? true : e.collapsed;
+        const toggleIcon = isCollapsed ? '▼' : '▲';
+        const headerHtml = `<h3 style="margin-bottom:0; border:none; display:flex; align-items:center; justify-content:space-between; cursor:pointer;" onclick="window.toggleExerciseCard(${i})"><span>${e.n} <span style="font-size:0.8em;color:#aaa;margin-left:5px;">${toggleIcon}</span></span><div onclick="event.stopPropagation()">${noteBtn} ${videoBtnHtml} ${swapBtn}</div></h3>`;
+        const contentStyle = isCollapsed ? 'display:none;' : 'margin-top:10px;';
+        const contentHtml = `<div style="${contentStyle}"><div class="workout-split"><div class="workout-visual"><img src="${e.img}" onerror="this.src='logo.png'"></div><div class="workout-bars" style="width:100%">${bars}</div></div>${setsHtml}</div>`;
+        
+        card.innerHTML = headerHtml + contentHtml;
         c.appendChild(card); if (e.superset) c.innerHTML += connector; 
     });
 }
+
+window.toggleExerciseCard = (idx) => { 
+    if(activeWorkout.exs[idx].collapsed === undefined) {
+        activeWorkout.exs[idx].collapsed = false; 
+    } else {
+        activeWorkout.exs[idx].collapsed = !activeWorkout.exs[idx].collapsed; 
+    }
+    saveLocalWorkout(); 
+    renderWorkout(); 
+};
 window.removeSpecificSet = (exIdx, setIdx) => { if(activeWorkout.exs[exIdx].sets.length > 1) { activeWorkout.exs[exIdx].sets.splice(setIdx, 1); saveLocalWorkout(); renderWorkout(); } };
 
 window.addDropset = (exIdx, setIdx) => { 
