@@ -436,9 +436,10 @@ async function loadRoutines() {
             div.innerHTML = `<div style="display:flex; justify-content:space-between;"><h3 style="color:var(--accent-color); display:flex; align-items:center; gap:8px;"><span class="routine-drag-handle" style="cursor:grab; font-size:1.2rem; color:#666;">☰</span> ${r.name}</h3><div>${canEdit ? `<button style="background:none;border:none;margin-right:10px;" onclick="openEditor('${r.id}')">✏️</button><button style="background:none;border:none;" onclick="delRoutine('${r.id}')">🗑️</button>` : '🔒'}</div></div><p style="color:#666; font-size:0.8rem; margin:10px 0;">${r.exercises.length} Ejercicios</p><button class="btn" onclick="startWorkout('${r.id}')">ENTRENAR</button>`;
             l.appendChild(div);
         });
+        if (l._sortable) { l._sortable.destroy(); l._sortable = null; }
         if (window.Sortable && myRoutines.length > 1) {
-            Sortable.create(l, {
-                animation: 150,
+            l._sortable = Sortable.create(l, {
+                animation: 150, fallbackOnBody: true, forceFallback: true,
                 delay: 150, delayOnTouchOnly: true,
                 handle: '.routine-drag-handle',
                 onEnd: async (evt) => {
@@ -799,9 +800,10 @@ function renderWorkout() {
         c.appendChild(card); if (e.superset) c.innerHTML += connector;
     });
 
+    if (c._sortable) { c._sortable.destroy(); c._sortable = null; }
     if (window.Sortable && activeWorkout.exs.length > 1) {
-        Sortable.create(c, {
-            animation: 150,
+        c._sortable = Sortable.create(c, {
+            animation: 150, fallbackOnBody: true, forceFallback: true,
             delay: 150, delayOnTouchOnly: true,
             handle: '.exercise-drag-handle',
             onEnd: async (evt) => {
