@@ -438,9 +438,12 @@ async function loadRoutines() {
             div.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center;"><div style="display:flex; align-items:center; gap:10px;"><span class="drag-handle-routine" style="cursor:grab; font-size:1.5rem; color:#888;">☰</span><h3 style="color:var(--accent-color); margin:0;">${r.name}</h3></div><div>${canEdit ? `<button style="background:none;border:none;margin-right:10px;" onclick="openEditor('${r.id}')">✏️</button><button style="background:none;border:none;" onclick="delRoutine('${r.id}')">🗑️</button>` : '🔒'}</div></div><p style="color:#666; font-size:0.8rem; margin:10px 0;">${r.exercises.length} Ejercicios</p><button class="btn" onclick="startWorkout('${r.id}')">ENTRENAR</button>`;
             l.appendChild(div);
         });
-        Sortable.create(l, {
+        if (l._sortable) l._sortable.destroy();
+        l._sortable = Sortable.create(l, {
             animation: 150,
             handle: '.drag-handle-routine',
+            forceFallback: true,
+            fallbackClass: 'sortable-fallback',
             onEnd: async function () {
                 const newOrder = Array.from(l.children).map(c => c.dataset.id).filter(id => id);
                 userData.routineOrder = newOrder;
@@ -644,7 +647,7 @@ window.startWorkout = async (rid, targetUid = null) => {
                         });
                     }
                 }
-                return { n: name, img: data.img, mInfo: data.mInfo, type: data.type, video: data.v, sets: sets, superset: isSuperset, note: "" };
+                return { n: name, img: data.img, mInfo: data.mInfo, type: data.type, video: data.v, sets: sets, superset: isSuperset, note: "", collapsed: true };
             })
         };
 
@@ -759,7 +762,8 @@ window.performSwap = (newName) => { if (swapTargetIndex === null) return; const 
 function renderWorkout() {
     const c = document.getElementById('workout-exercises'); c.innerHTML = ''; document.getElementById('workout-title').innerText = activeWorkout.name;
     activeWorkout.exs.forEach((e, i) => {
-        let cardStyle = "border-left:3px solid var(--accent-color);"; let connector = ""; if (e.superset) { cardStyle += " margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: 1px dashed #444;"; connector = `<div style="text-align:center; background:var(--card-color); color:var(--accent-color); font-size:1.2rem; line-height:0.5;">🔗</div>`; } else if (i > 0 && activeWorkout.exs[i - 1].superset) cardStyle += " border-top-left-radius: 0; border-top-right-radius: 0; margin-top:0;";
+        let cardStyle = "border-left:3px solid var(--accent-color);";
+        if (e.superset) { cardStyle += " margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: 1px dashed #444;"; } else if (i > 0 && activeWorkout.exs[i - 1].superset) cardStyle += " border-top-left-radius: 0; border-top-right-radius: 0; margin-top:0;";
         const card = document.createElement('div'); card.className = 'card'; card.style.cssText = cardStyle;
         let videoBtnHtml = (userData.showVideos && e.video) ? `<button class="btn-small btn-outline" style="float:right; width:auto; margin:0; padding:2px 8px; border-color:var(--danger-border); color:var(--danger-border);" onclick="window.openVideo('${e.video}')">🎥</button>` : '';
         const swapBtn = `<button class="btn-small btn-outline" style="float:right; width:auto; margin:0 5px 0 0; padding:2px 8px; border-color:#aaa; color:#fff;" onclick="window.initSwap(${i})">🔄</button>`;
@@ -785,16 +789,27 @@ function renderWorkout() {
             setsHtml += `<div class="set-row ${isDropClass}" style="${rowOpacity}"><div class="set-num" style="${s.isDrop ? 'color:var(--warning-color); font-size:0.7rem;' : ''}">${displayNum}</div>${histHtml}<div><input type="number" value="${s.r}" ${isDisabled} onchange="uS(${i},${j},'r',this.value)" inputmode="decimal" pattern="[0-9]*"></div><div><input type="number" class="kg-input-placeholder" placeholder="${kgPlaceholder}" value="${weightVal}" ${isDisabled} onchange="uS(${i},${j},'w',this.value)" inputmode="decimal" pattern="[0-9]*"></div><div style="display:flex; flex-direction:column; gap:2px; pointer-events: auto; align-items:center;"><button id="btn-${i}-${j}" class="btn-outline ${s.d ? 'btn-done' : ''}" style="margin:0;padding:0;height:32px;width:100%;" onclick="tS(${i},${j})">${s.d ? '✓' : ''}</button>${dropActionBtn}</div></div>`;
         });
         setsHtml += `<div class="sets-actions"><button class="btn-set-control" style="border-color:var(--success-color); color:var(--success-color); margin-right:auto;" onclick="window.toggleAllSets(${i})">✓ TODO</button><button class="btn-set-control" onclick="removeSet(${i})">- Serie</button><button class="btn-set-control" onclick="addSet(${i})">+ Serie</button></div>`;
-        const isCollapsed = !!e.collapsed;
+        const isCollapsed = e.collapsed !== false;
         const toggleIcon = isCollapsed ? '▶' : '▼';
         card.dataset.id = e.n;
         card.innerHTML = `<h3 onclick="window.toggleExCard(${i})" style="margin-bottom:${isCollapsed ? '0' : '10px'}; border:none; display:flex; align-items:center; justify-content:space-between; cursor:pointer; padding:5px 0;"><div style="display:flex; align-items:center; gap:8px;"><span class="drag-handle-exercise" style="cursor:grab; font-size:1.5rem; color:#888;" onclick="event.stopPropagation()">☰</span><span style="color:var(--accent-color); font-size:0.8rem;">${toggleIcon}</span><span>${e.n}</span></div><div style="display:flex; gap:5px;" onclick="event.stopPropagation()">${noteBtn} ${videoBtnHtml} ${swapBtn}</div></h3><div style="${isCollapsed ? 'display:none;' : ''}"><div class="workout-split"><div class="workout-visual"><img src="${e.img}" onerror="this.src='logo.png'"></div><div class="workout-bars" style="width:100%">${bars}</div></div>${setsHtml}</div>`;
-        c.appendChild(card); if (e.superset) c.innerHTML += connector;
+        c.appendChild(card);
+        if (e.superset) {
+            const connectorDiv = document.createElement('div');
+            connectorDiv.className = 'superset-connector';
+            connectorDiv.style.cssText = "text-align:center; background:var(--card-color); color:var(--accent-color); font-size:1.2rem; line-height:0.5;";
+            connectorDiv.innerHTML = "🔗";
+            c.appendChild(connectorDiv);
+        }
     });
-    Sortable.create(c, {
+    if (c._sortable) c._sortable.destroy();
+    c._sortable = Sortable.create(c, {
         animation: 150,
         handle: '.drag-handle-exercise',
-        onEnd: async function () {
+        filter: '.superset-connector',
+        forceFallback: true,
+        fallbackClass: 'sortable-fallback',
+        onEnd: function () {
             const currentOrderNames = Array.from(c.querySelectorAll('.card')).map(card => card.dataset.id).filter(Boolean);
             const newExsArray = [];
             currentOrderNames.forEach(name => {
@@ -804,12 +819,13 @@ function renderWorkout() {
             activeWorkout.exs = newExsArray;
             if (!userData.exerciseOrders) userData.exerciseOrders = {};
             userData.exerciseOrders[activeWorkout.name] = activeWorkout.exs.map(ex => ex.n);
-            try { await updateDoc(doc(db, "users", currentUser.uid), { exerciseOrders: userData.exerciseOrders }); } catch (err) { }
-            saveLocalWorkout(); renderWorkout();
+            updateDoc(doc(db, "users", currentUser.uid), { exerciseOrders: userData.exerciseOrders }).catch(err => { });
+            saveLocalWorkout();
+            setTimeout(() => renderWorkout(), 10);
         }
     });
 }
-window.toggleExCard = (idx) => { if (activeWorkout && activeWorkout.exs[idx]) { activeWorkout.exs[idx].collapsed = !activeWorkout.exs[idx].collapsed; saveLocalWorkout(); renderWorkout(); } };
+window.toggleExCard = (idx) => { if (activeWorkout && activeWorkout.exs[idx]) { activeWorkout.exs[idx].collapsed = activeWorkout.exs[idx].collapsed === false ? true : false; saveLocalWorkout(); renderWorkout(); } };
 window.removeSpecificSet = (exIdx, setIdx) => { if (activeWorkout.exs[exIdx].sets.length > 1) { activeWorkout.exs[exIdx].sets.splice(setIdx, 1); saveLocalWorkout(); renderWorkout(); } };
 
 window.addDropset = (exIdx, setIdx) => {
