@@ -10,15 +10,15 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#050505">
     
-    <title>Fit Data Pro</title> 
-    <meta name="apple-mobile-web-app-title" content="Fit Data Pro">
+    <title>Fit Data Lite</title> 
+    <meta name="apple-mobile-web-app-title" content="Fit Data Lite">
     <link rel="icon" href="favicon.ico">
     <link rel="apple-touch-icon" href="logo.png">
     
     <link href="https://fonts.googleapis.com/css2?family=Russo+One&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -31,7 +31,7 @@
     <header id="main-header" class="hidden">
         <div class="brand">
             <img src="logo.png" class="header-logo" onerror="this.style.display='none'">
-            <div>FIT DATA <span>PRO</span></div>
+            <div>FIT DATA <span>LITE</span></div>
         </div>
         <div class="header-actions">
             <div id="top-btn-coach" class="top-nav-item hidden" onclick="window.loadAdminUsers(); window.switchTab('admin-view');">
@@ -133,7 +133,7 @@
                 <input type="file" id="file-avatar" accept="image/*" class="hidden" onchange="window.uploadAvatar(this)">
                 <div style="flex:1; margin-left:10px;">
                     <h3 id="profile-name" style="margin:0;">Cargando...</h3>
-                    <span style="color:#666; font-size:0.8rem;">Atleta</span>
+                    <span style="color:#666; font-size:0.8rem;">Cliente</span>
                 </div>
                 <div id="btn-diet-view" class="hidden" onclick="window.openDietView()" style="display:flex; flex-direction:column; align-items:center; cursor:pointer; margin-right:10px;">
                     <span style="font-size:1.8rem;">🥗</span><span style="font-size:0.6rem; color:var(--success-color); font-weight:bold;">DIETA</span>
@@ -281,10 +281,10 @@
 
         <section id="admin-view" class="view-container">                                                                          
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h2>PANEL COACH</h2><button class="btn-small btn-outline" style="width:auto; margin:0;" onclick="window.loadAdminUsers(true)">🔄</button></div>
-            <div class="admin-tabs"><div id="tab-users" class="admin-tab-btn active" onclick="window.toggleAdminMode('users')">👥 ATLETAS</div><div id="tab-lib" class="admin-tab-btn" onclick="window.toggleAdminMode('lib')">📚 LIBRERÍA</div><div id="tab-plans" class="admin-tab-btn" onclick="window.toggleAdminMode('plans')">📋 PLANES</div></div>
+            <div class="admin-tabs"><div id="tab-users" class="admin-tab-btn active" onclick="window.toggleAdminMode('users')">👥 CLIENTES</div><div id="tab-lib" class="admin-tab-btn" onclick="window.toggleAdminMode('lib')">📚 LIBRERÍA</div><div id="tab-plans" class="admin-tab-btn" onclick="window.toggleAdminMode('plans')">📋 PLANES</div></div>
             
             <div class="card" id="admin-users-card">
-                <h3>Lista de Atletas</h3>
+                <h3>Lista de Clientes</h3>
                 <div id="admin-list"></div>
                 <div class="hidden" style="margin-top:20px; border-top:1px solid #333; padding-top:15px;">
     <button class="btn-outline" style="border-color:#500; color:#f55; font-size:0.7rem;" onclick="window.runGlobalMigration()">
@@ -308,7 +308,7 @@
         </section>
 
         <section id="coach-detail-view" class="view-container">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><button class="btn-outline btn-small" style="width:auto; margin:0;" onclick="window.switchTab('admin-view')">← VOLVER</button><h3 style="margin:0;">FICHA ATLETA</h3></div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;"><button class="btn-outline btn-small" style="width:auto; margin:0;" onclick="window.switchTab('admin-view')">← VOLVER</button><h3 style="margin:0;">FICHA CLIENTE</h3></div>
             <div style="text-align:center; margin-bottom:15px;">
                 <div class="avatar-circle" style="width:80px; height:80px; margin:0 auto 10px auto;"><img id="coach-user-img" src="" style="display:none; cursor:pointer;" onclick="window.viewFullImage(this.src)"><span id="coach-user-initial" style="font-size:2rem; color:var(--accent-color);">U</span></div>
                 <h2 id="coach-user-name" style="margin:0;">Usuario</h2><p id="coach-user-email" style="color:#666; font-size:0.8rem;"></p><div id="coach-user-meta" style="color:#888; font-size:0.7rem; margin-top:5px;"></div>
@@ -329,7 +329,7 @@
                 <div class="card"><h3>RUTINAS ASIGNADAS</h3><div id="coach-assigned-list" style="font-size:0.8rem; color:#888; margin-bottom:15px;">Cargando...</div><div style="display:flex; gap:5px; margin-top:5px;"><select id="coach-routine-select" style="margin:0;"></select><button class="btn-small btn-outline" style="width:auto; padding:0 15px;" onclick="window.goToCreateRoutine()">➕ CREAR</button><button class="btn-small btn" style="width:auto; padding:0 15px;" onclick="window.assignRoutine()">ENVIAR</button></div><hr style="border:0; border-top:1px solid #333; margin:15px 0;"><div style="display:flex; gap:5px; margin-top:5px;"><select id="coach-plan-select" style="margin:0;"><option>Cargando planes...</option></select><button class="btn-small btn" style="width:auto; padding:0 15px;" onclick="window.assignPlan()">ASIGNAR PLAN</button></div></div>
                 
                 <div class="card" id="coach-config-card">
-                    <h3>⚙️ CONFIGURACIÓN ATLETA</h3>
+                    <h3>⚙️ CONFIGURACIÓN CLIENTE</h3>
                     <div style="margin-bottom:15px; border-bottom:1px solid #333; padding-bottom:10px;"><div style="display:flex; gap:5px; margin-top:5px;"><select id="coach-diet-select" style="margin:0; flex:1;"><option value="">-- Sin Dieta --</option></select><button class="btn-small btn" style="width:auto;" onclick="window.assignDiet()">GUARDAR</button></div></div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:10px;"><span>Bioimpedancia</span><label class="switch"><input type="checkbox" id="coach-toggle-bio" onchange="window.toggleUserFeature('showBio', this.checked)"><span class="slider"></span></label></div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:10px;"><span>Pliegues</span><label class="switch"><input type="checkbox" id="coach-toggle-skinfolds" onchange="window.toggleUserFeature('showSkinfolds', this.checked)"><span class="slider"></span></label></div>
@@ -339,7 +339,7 @@
                     
                 </div>
 
-                <button class="btn-danger btn" style="width:100%; margin-bottom:30px;" onclick="window.deleteUser()">🗑️ ELIMINAR ATLETA</button>
+                <button class="btn-danger btn" style="width:100%; margin-bottom:30px;" onclick="window.deleteUser()">🗑️ ELIMINAR CLIENTE</button>
             </div>
         </section>
 
@@ -351,7 +351,7 @@
     
     <div id="modal-notice-viewer" class="modal" style="z-index:9000;"><div class="modal-content" style="border-color:var(--warning-color); text-align:left;"><div style="text-align:center; color:var(--warning-color); font-weight:bold; margin-bottom:10px; font-size:0.8rem;" id="viewer-header">AVISO</div><h2 id="viewer-title" style="margin-top:0; color:white; text-align:center;">Título</h2><img id="viewer-img" src="" class="hidden" style="width:100%; border-radius:8px; margin-bottom:15px; border:1px solid #333;"><p id="viewer-text" style="color:#ccc; line-height:1.5; white-space: pre-wrap; margin-bottom:20px;"></p><button id="viewer-link-btn" class="btn hidden" style="margin-bottom:10px; background:#444;">🔗 ABRIR ENLACE</button><button id="btn-dismiss-notice" class="btn" onclick="window.dismissNotice()">ENTENDIDO</button></div></div>
 
-    <div id="modal-assign-plan" class="modal"><div class="modal-content"><h3>ENVIAR A ATLETAS</h3><p id="assign-plan-title" style="color:var(--accent-color); margin-bottom:10px;">Selecciona atletas:</p><div id="assign-users-list" class="selector-list-container"></div><button class="btn" onclick="window.distributePlan()">✅ ENVIAR AHORA</button><button class="btn-outline" style="margin-top:10px;" onclick="window.closeModal('modal-assign-plan')">CANCELAR</button></div></div>
+    <div id="modal-assign-plan" class="modal"><div class="modal-content"><h3>ENVIAR A CLIENTES</h3><p id="assign-plan-title" style="color:var(--accent-color); margin-bottom:10px;">Selecciona clientes:</p><div id="assign-users-list" class="selector-list-container"></div><button class="btn" onclick="window.distributePlan()">✅ ENVIAR AHORA</button><button class="btn-outline" style="margin-top:10px;" onclick="window.closeModal('modal-assign-plan')">CANCELAR</button></div></div>
 
     <div id="modal-swap" class="modal"><div class="modal-content"><h3>CAMBIAR EJERCICIO</h3><div id="swap-list" style="max-height:300px; overflow-y:auto; text-align:left;"></div><button class="btn-outline" style="margin-top:15px;" onclick="window.closeModal('modal-swap')">CANCELAR</button></div></div>
     <div id="modal-details" class="modal"><div class="modal-content" style="text-align:left;"><h3 id="detail-title" style="color:var(--accent-color); text-align:center; margin-bottom:15px;">DETALLES</h3><div id="detail-content" style="font-size:0.85rem; max-height:60vh; overflow-y:auto;"></div><button class="btn-outline" style="margin-top:15px;" onclick="window.closeModal('modal-details')">CERRAR</button></div></div>
@@ -363,6 +363,13 @@
     <div id="modal-image-viewer" class="modal" style="z-index: 5000;"><div class="modal-content" style="background:black; padding:0; width:100%; height:100%; max-width:100%; border:none; display:flex; align-items:center; justify-content:center;"><img id="full-image-src" style="max-width:100%; max-height:100%; object-fit:contain;"><button class="btn-float" style="background:rgba(255,255,255,0.2); color:white; bottom:40px;" onclick="window.closeModal('modal-image-viewer')">✕</button></div></div>
 
     <script type="module" src="js/app.js"></script>
-    
+    <script>
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            for(let registration of registrations) { registration.unregister().then(function() { console.log('♻️ Service Worker desregistrado correctamente.'); }); }
+        });
+        caches.keys().then(function(names) { for (let name of names) caches.delete(name); });
+    }
+</script>
 </body>
 </html>
