@@ -123,10 +123,18 @@
         <section id="editor-view" class="view-container">
             <div class="sticky-editor-header">
                 <h2 id="editor-title">NUEVA RUTINA</h2>
-                <div style="display:flex; gap:10px; margin-bottom:10px;">
-                    <input type="text" id="editor-name" placeholder="Nombre de Rutina" style="margin:0;">
-                    <button id="btn-save-routine" class="btn" style="width:auto; padding:0 25px;"
-                        onclick="window.saveRoutine()">GUARDAR</button>
+                <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:10px;">
+                    <div style="display:flex; gap:10px;">
+                        <input type="text" id="editor-name" placeholder="Nombre de Rutina" style="margin:0; flex:1;">
+                        <button id="btn-save-routine" class="btn" style="width:auto; padding:0 25px;"
+                            onclick="window.saveRoutine()">GUARDAR</button>
+                    </div>
+                    <div id="self-assign-container"
+                        style="display:flex; align-items:center; gap:8px; font-size:0.8rem; color:#aaa; padding:5px 0;">
+                        <input type="checkbox" id="editor-self-assign" style="width:20px; height:20px; margin:0;"
+                            checked>
+                        <label for="editor-self-assign">Auto-asignar a mis rutinas</label>
+                    </div>
                 </div>
                 <input type="search" id="ex-search" placeholder="🔍 Buscar ejercicio..."
                     oninput="window.filterExercises(this.value)" style="margin-bottom:0;">
@@ -297,7 +305,8 @@
                     <h3>CONFIGURACIÓN</h3>
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                         <span>Tiempo Descanso (s)</span><input type="number" id="cfg-rest-time"
-                            style="width:80px; margin:0; text-align:center;" value="60"></div>
+                            style="width:80px; margin:0; text-align:center;" value="60">
+                    </div>
                     <div style="margin-bottom:15px; padding-top:10px; border-top:1px solid #333;">
                         <button class="btn-small btn-outline" style="width:100%; border-color:#444;"
                             onclick="window.enableNotifications()">⌚ VINCULAR NOTIFICACIONES</button>
@@ -545,15 +554,18 @@
                     <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
                         <span>Bioimpedancia</span><label class="switch"><input type="checkbox" id="coach-toggle-bio"
                                 onchange="window.toggleUserFeature('showBio', this.checked)"><span
-                                class="slider"></span></label></div>
+                                class="slider"></span></label>
+                    </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
                         <span>Pliegues</span><label class="switch"><input type="checkbox" id="coach-toggle-skinfolds"
                                 onchange="window.toggleUserFeature('showSkinfolds', this.checked)"><span
-                                class="slider"></span></label></div>
+                                class="slider"></span></label>
+                    </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
                         <span>Medidas</span><label class="switch"><input type="checkbox" id="coach-toggle-measures"
                                 onchange="window.toggleUserFeature('showMeasurements', this.checked)"><span
-                                class="slider"></span></label></div>
+                                class="slider"></span></label>
+                    </div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:10px;"><span>Habilitar
                             Fotos</span><label class="switch"><input type="checkbox" id="coach-toggle-photos"
                                 onchange="window.toggleUserFeature('showPhotos', this.checked)"><span
@@ -692,7 +704,8 @@
             style="width:100%; max-width:400px; padding:10px; background:var(--card-color); border:1px solid var(--accent-color);">
             <img id="gif-frame" style="width:100%; height:auto; border-radius:8px; display:block; margin:0 auto;"
                 src=""><button class="btn" style="margin-top:10px; width:100%;" onclick="window.closeGif()">CERRAR
-                VISOR</button></div>
+                VISOR</button>
+        </div>
     </div>
     <div id="modal-diet" class="modal" style="z-index: 3500;">
         <div class="modal-content"
@@ -709,7 +722,8 @@
             style="background:black; padding:0; width:100%; height:100%; max-width:100%; border:none; display:flex; align-items:center; justify-content:center;">
             <img id="full-image-src" style="max-width:100%; max-height:100%; object-fit:contain;"><button
                 class="btn-float" style="background:rgba(255,255,255,0.2); color:white; bottom:40px;"
-                onclick="window.closeModal('modal-image-viewer')">✕</button></div>
+                onclick="window.closeModal('modal-image-viewer')">✕</button>
+        </div>
     </div>
 
     <script type="module" src="js/app.js"></script>
