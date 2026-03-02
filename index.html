@@ -196,6 +196,7 @@
                 <div class="card">
                     <h3>MAPA MUSCULAR</h3>
                     <canvas id="userMuscleBodyMap" style="max-width:100%; height:auto; display:block; margin:0 auto;"></canvas>
+                    <div id="userMuscleRadarWrap" style="height:280px; width:100%; position:relative; display:none; margin-top:8px;"><canvas id="userMuscleChart"></canvas></div>
                 </div>
                 <div class="card" id="user-photos-card">
                     <h3>EVOLUCIÓN FÍSICA</h3>
@@ -343,6 +344,16 @@
                         </div>
                         <label class="switch"><input type="checkbox" id="cfg-ranking"
                                 onchange="window.toggleRankingOptIn(this.checked)"><span class="slider"></span></label>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #333; padding-top:10px;">
+                        <div><span>Vista Muscular</span>
+                            <small style="color:#666; font-size:0.65rem; display:block;">Perfil → Progreso</small>
+                        </div>
+                        <div style="display:flex; gap:4px;">
+                            <button id="mvt-map" onclick="window.setMuscleView('map')" style="margin:0; padding:4px 9px; font-size:0.7rem; border:1px solid #555; border-radius:6px; background:var(--accent-color); color:#000; cursor:pointer; font-weight:bold;">Silueta</button>
+                            <button id="mvt-radar" onclick="window.setMuscleView('radar')" style="margin:0; padding:4px 9px; font-size:0.7rem; border:1px solid #555; border-radius:6px; background:transparent; color:#fff; cursor:pointer; font-weight:bold;">Radar</button>
+                            <button id="mvt-both" onclick="window.setMuscleView('both')" style="margin:0; padding:4px 9px; font-size:0.7rem; border:1px solid #555; border-radius:6px; background:transparent; color:#fff; cursor:pointer; font-weight:bold;">Ambas</button>
+                        </div>
                     </div>
                     <button class="btn-outline" style="margin-top:15px;" onclick="window.saveConfig()">GUARDAR
                         AJUSTES</button>

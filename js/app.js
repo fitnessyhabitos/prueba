@@ -367,9 +367,26 @@ window.loadProfile = async () => {
         });
     } catch (e) { histDiv.innerHTML = "Error."; }
     const mStats = userData.muscleStats || {};
-    const maxMuscle = Math.max(1, ...Object.values(mStats));
-    const profileIntensities = Object.fromEntries(Object.entries(mStats).filter(([, v]) => v > 0).map(([k, v]) => [k, v / maxMuscle]));
-    renderMuscleMap('userMuscleBodyMap', profileIntensities);
+    const muscleView = userData.muscleView || 'map';
+    // Actualizar estado visual de los botones del toggle
+    ['map', 'radar', 'both'].forEach(v => {
+        const btn = document.getElementById(`mvt-${v}`);
+        if (!btn) return;
+        if (v === muscleView) { btn.style.background = 'var(--accent-color)'; btn.style.color = '#000'; btn.style.borderColor = 'var(--accent-color)'; }
+        else { btn.style.background = 'transparent'; btn.style.color = '#fff'; btn.style.borderColor = '#555'; }
+    });
+    const mapCanvas = document.getElementById('userMuscleBodyMap');
+    const radarWrap = document.getElementById('userMuscleRadarWrap');
+    const showMap = muscleView === 'map' || muscleView === 'both';
+    const showRadar = muscleView === 'radar' || muscleView === 'both';
+    if (mapCanvas) mapCanvas.style.display = showMap ? 'block' : 'none';
+    if (radarWrap) radarWrap.style.display = showRadar ? 'block' : 'none';
+    if (showMap) {
+        const maxMuscle = Math.max(1, ...Object.values(mStats));
+        const profileIntensities = Object.fromEntries(Object.entries(mStats).filter(([, v]) => v > 0).map(([k, v]) => [k, v / maxMuscle]));
+        renderMuscleMap('userMuscleBodyMap', profileIntensities);
+    }
+    if (showRadar) { renderMuscleRadar('userMuscleChart', mStats); }
 };
 
 window.deleteHistoryWorkout = async (id) => {
@@ -585,10 +602,25 @@ async function renderMuscleMap(canvasId, muscleIntensities) {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     try {
-        const base = await loadImg('muscles/baseImage.png');
+        const base = await loadImg('muscles/baseImage_transparent.png');
         canvas.width = base.naturalWidth;
         canvas.height = base.naturalHeight;
-        ctx.drawImage(base, 0, 0);
+
+        // 1. Fondo oscuro
+        ctx.fillStyle = '#111111';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // 2. Silueta aclarada: dibujar en canvas temporal, teñir blanco y componer
+        const silTmp = document.createElement('canvas');
+        silTmp.width = canvas.width; silTmp.height = canvas.height;
+        const stctx = silTmp.getContext('2d');
+        stctx.drawImage(base, 0, 0);
+        stctx.globalCompositeOperation = 'source-atop';
+        stctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        stctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(silTmp, 0, 0);
+
+        // 3. Overlays musculares con rojo neón + glow
         const fileIntensity = {};
         for (const [muscle, intensity] of Object.entries(muscleIntensities)) {
             (MUSCLE_TO_FILE[muscle] || []).forEach(f => {
@@ -604,11 +636,16 @@ async function renderMuscleMap(canvasId, muscleIntensities) {
                 const tctx = tmp.getContext('2d');
                 tctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 tctx.globalCompositeOperation = 'source-atop';
-                tctx.fillStyle = 'rgba(220, 50, 50, 0.9)';
+                tctx.fillStyle = 'rgba(255, 18, 45, 0.97)';
                 tctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.globalAlpha = Math.max(0.35, intensity);
+                // Glow neón
+                ctx.shadowBlur = Math.round(10 + intensity * 18);
+                ctx.shadowColor = `rgba(255, 20, 55, ${0.45 + intensity * 0.5})`;
+                ctx.globalAlpha = Math.max(0.38, intensity);
                 ctx.drawImage(tmp, 0, 0);
                 ctx.globalAlpha = 1.0;
+                ctx.shadowBlur = 0;
+                ctx.shadowColor = 'transparent';
             } catch (e) { }
         }
     } catch (e) { console.warn('Muscle map error:', e); }
@@ -739,6 +776,32 @@ window.toggleAllSets = (exIdx) => { const ex = activeWorkout.exs[exIdx]; const a
 window.openNoteModal = (idx) => { noteTargetIndex = idx; const existingNote = activeWorkout.exs[idx].note || ""; document.getElementById('exercise-note-input').value = existingNote; window.openModal('modal-note'); };
 window.saveNote = () => { if (noteTargetIndex === null) return; const txt = document.getElementById('exercise-note-input').value.trim(); activeWorkout.exs[noteTargetIndex].note = txt; saveLocalWorkout(); renderWorkout(); window.closeModal('modal-note'); showToast(txt ? "📝 Nota guardada" : "🗑️ Nota borrada"); };
 window.toggleRankingOptIn = async (val) => { try { await updateDoc(doc(db, "users", currentUser.uid), { rankingOptIn: val }); userData.rankingOptIn = val; const btnRank = document.getElementById('top-btn-ranking'); if (val) btnRank.classList.remove('hidden'); else btnRank.classList.add('hidden'); showToast(val ? "🏆 Ahora participas en el Ranking" : "👻 Ranking desactivado"); } catch (e) { alert("Error actualizando perfil"); } };
+
+window.setMuscleView = async (val) => {
+    userData.muscleView = val;
+    try { await updateDoc(doc(db, "users", currentUser.uid), { muscleView: val }); } catch (e) { }
+    ['map', 'radar', 'both'].forEach(v => {
+        const btn = document.getElementById(`mvt-${v}`);
+        if (!btn) return;
+        if (v === val) { btn.style.background = 'var(--accent-color)'; btn.style.color = '#000'; btn.style.borderColor = 'var(--accent-color)'; }
+        else { btn.style.background = 'transparent'; btn.style.color = '#fff'; btn.style.borderColor = '#555'; }
+    });
+    const mStats = userData.muscleStats || {};
+    const mapCanvas = document.getElementById('userMuscleBodyMap');
+    const radarWrap = document.getElementById('userMuscleRadarWrap');
+    const showMap = val === 'map' || val === 'both';
+    const showRadar = val === 'radar' || val === 'both';
+    if (mapCanvas) mapCanvas.style.display = showMap ? 'block' : 'none';
+    if (radarWrap) radarWrap.style.display = showRadar ? 'block' : 'none';
+    if (showMap) {
+        const maxM = Math.max(1, ...Object.values(mStats));
+        const intensities = Object.fromEntries(Object.entries(mStats).filter(([, v]) => v > 0).map(([k, v]) => [k, v / maxM]));
+        renderMuscleMap('userMuscleBodyMap', intensities);
+    }
+    if (showRadar) { renderMuscleRadar('userMuscleChart', mStats); }
+    const labels = { map: '🫀 Vista Silueta', radar: '📊 Vista Radar', both: '🔀 Vista Combinada' };
+    showToast(labels[val] || '✅ Vista actualizada');
+};
 
 window.changeRankFilter = (type, val) => {
     if (type === 'time') { rankFilterTime = val; document.querySelectorAll('#ranking-view .pill').forEach(el => el.classList.remove('active')); document.getElementById(`time-${val}`).classList.add('active'); document.getElementById(`gender-${rankFilterGender}`).classList.add('active'); }
