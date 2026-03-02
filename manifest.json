@@ -1,6 +1,6 @@
 {
-  "name": "Fit Data Lite",
-  "short_name": "Fit Data Lite",
+  "name": "Fit Data Pro",
+  "short_name": "Fit Data Pro",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#050505",
