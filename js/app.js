@@ -636,16 +636,11 @@ async function renderMuscleMap(canvasId, muscleIntensities) {
                 const tctx = tmp.getContext('2d');
                 tctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 tctx.globalCompositeOperation = 'source-atop';
-                tctx.fillStyle = 'rgba(255, 18, 45, 0.97)';
+                tctx.fillStyle = 'rgba(225, 25, 45, 1.0)';
                 tctx.fillRect(0, 0, canvas.width, canvas.height);
-                // Glow neón
-                ctx.shadowBlur = Math.round(10 + intensity * 18);
-                ctx.shadowColor = `rgba(255, 20, 55, ${0.45 + intensity * 0.5})`;
-                ctx.globalAlpha = Math.max(0.38, intensity);
+                ctx.globalAlpha = Math.max(0.42, intensity);
                 ctx.drawImage(tmp, 0, 0);
                 ctx.globalAlpha = 1.0;
-                ctx.shadowBlur = 0;
-                ctx.shadowColor = 'transparent';
             } catch (e) { }
         }
     } catch (e) { console.warn('Muscle map error:', e); }
@@ -1414,6 +1409,7 @@ window.openCoachView = async (uid, u) => {
     const maxCoachMuscle = Math.max(1, ...Object.values(coachMStats));
     const coachIntensities = Object.fromEntries(Object.entries(coachMStats).filter(([, v]) => v > 0).map(([k, v]) => [k, v / maxCoachMuscle]));
     renderMuscleMap('coachMuscleBodyMap', coachIntensities);
+    renderMuscleRadar('coachMuscleChart', coachMStats);
     const st = freshU.stats || {};
     document.getElementById('coach-stats-text').innerHTML = `<div class="stat-pill"><b>${st.workouts || 0}</b><span>ENTRENOS</span></div><div class="stat-pill"><b>${(st.totalKg / 1000 || 0).toFixed(1)}t</b><span>CARGA</span></div><div class="stat-pill"><b>${st.totalReps || 0}</b><span>REPS</span></div>`;
     if (freshU.weightHistory) { fixCoachChart('coachWeightChart'); injectChartFilter('coachWeightChart', 'window.updateWeightChart'); coachChart = renderFilteredChart('coachWeightChart', coachChart, freshU.weightHistory, 'weight', '#ff3333', 90); }
