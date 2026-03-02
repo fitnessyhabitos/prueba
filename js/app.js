@@ -366,7 +366,10 @@ window.loadProfile = async () => {
             histDiv.innerHTML += `<div class="history-row"><div style="color:var(--accent-color); font-weight:bold;">${dateStr}</div><div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:5px;">${d.routine}</div><div style="display:flex; justify-content:center;"><span class="rpe-dot ${rpeColor}" title="${d.rpe}"></span></div><div style="text-align:right;">${btnVer}${btnBorrar}</div></div>`;
         });
     } catch (e) { histDiv.innerHTML = "Error."; }
-    renderMuscleRadar('userMuscleChart', userData.muscleStats || {});
+    const mStats = userData.muscleStats || {};
+    const maxMuscle = Math.max(1, ...Object.values(mStats));
+    const profileIntensities = Object.fromEntries(Object.entries(mStats).filter(([, v]) => v > 0).map(([k, v]) => [k, v / maxMuscle]));
+    renderMuscleMap('userMuscleBodyMap', profileIntensities);
 };
 
 window.deleteHistoryWorkout = async (id) => {
@@ -549,6 +552,66 @@ function renderMuscleRadar(canvasId, stats) {
     const ctx = document.getElementById(canvasId); if (!ctx) return; const existingChart = Chart.getChart(ctx); if (existingChart) existingChart.destroy();
     const muscleGroups = ["Pecho", "Espalda", "Cuádriceps", "Isquios", "Hombros", "Bíceps", "Tríceps", "Glúteos"]; const dataValues = muscleGroups.map(m => stats[m] || 0); const maxValue = Math.max(...dataValues); let calculatedStep = Math.ceil(maxValue / 5); if (calculatedStep < 1) calculatedStep = 1; const niceMax = Math.ceil(maxValue / calculatedStep) * calculatedStep;
     new Chart(ctx, { type: 'radar', data: { labels: muscleGroups, datasets: [{ label: 'Series', data: dataValues, backgroundColor: 'rgba(255, 51, 51, 0.25)', borderColor: '#ff3333', borderWidth: 2, pointBackgroundColor: '#ff3333', pointBorderColor: '#fff', pointRadius: 3, pointHoverRadius: 5 }] }, options: { scales: { r: { angleLines: { color: 'rgba(255, 255, 255, 0.1)' }, grid: { color: 'rgba(255, 255, 255, 0.1)', circular: false }, pointLabels: { color: '#cccccc', font: { size: 10 } }, ticks: { display: false, stepSize: calculatedStep, maxTicksLimit: 6 }, suggestedMin: 0, max: niceMax > 0 ? niceMax : 5 } }, plugins: { legend: { display: false } }, maintainAspectRatio: false } });
+}
+
+// --- MAPA MUSCULAR ---
+const MUSCLE_TO_FILE = {
+    'Pecho': ['pecho.png'],
+    'Espalda': ['espalda.png'],
+    'Cuádriceps': ['cuadriceps.png'],
+    'Isquios': ['isquios.png'],
+    'Glúteos': ['gluteos.png'],
+    'Hombros': ['hombros.png'],
+    'Bíceps': ['biceps.png'],
+    'Tríceps': ['triceps.png'],
+    'Gemelos': ['gemelos.png'],
+    'Abs': ['abs.png'],
+    'Pierna': ['cuadriceps.png', 'isquios.png', 'gluteos.png', 'gemelos.png'],
+    'Brazos': ['biceps.png', 'triceps.png'],
+};
+
+function loadImg(src) {
+    return new Promise((res, rej) => {
+        const img = new Image();
+        img.onload = () => res(img);
+        img.onerror = () => rej(new Error('Load failed: ' + src));
+        img.src = src;
+    });
+}
+
+async function renderMuscleMap(canvasId, muscleIntensities) {
+    // muscleIntensities: { "Pecho": 1.0, "Espalda": 0.6, ... } values 0-1
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    try {
+        const base = await loadImg('muscles/baseImage.png');
+        canvas.width = base.naturalWidth;
+        canvas.height = base.naturalHeight;
+        ctx.drawImage(base, 0, 0);
+        const fileIntensity = {};
+        for (const [muscle, intensity] of Object.entries(muscleIntensities)) {
+            (MUSCLE_TO_FILE[muscle] || []).forEach(f => {
+                fileIntensity[f] = Math.max(fileIntensity[f] || 0, intensity);
+            });
+        }
+        for (const [file, intensity] of Object.entries(fileIntensity)) {
+            if (intensity <= 0) continue;
+            try {
+                const img = await loadImg(`muscles/${file}`);
+                const tmp = document.createElement('canvas');
+                tmp.width = canvas.width; tmp.height = canvas.height;
+                const tctx = tmp.getContext('2d');
+                tctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                tctx.globalCompositeOperation = 'source-atop';
+                tctx.fillStyle = 'rgba(220, 50, 50, 0.9)';
+                tctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.globalAlpha = Math.max(0.35, intensity);
+                ctx.drawImage(tmp, 0, 0);
+                ctx.globalAlpha = 1.0;
+            } catch (e) { }
+        }
+    } catch (e) { console.warn('Muscle map error:', e); }
 }
 
 window.openDietView = () => { if (!userData.dietFile) return; const url = `nutricion/${userData.dietFile}`; document.getElementById('diet-frame').src = url; window.openModal('modal-diet'); };
@@ -903,7 +966,28 @@ function openRest() { window.openModal('modal-timer'); initAudioEngine(); let du
 window.closeTimer = () => { clearInterval(timerInt); window.closeModal('modal-timer'); };
 window.addRestTime = (s) => { restEndTime += (s * 1000); if (s > 0) totalRestTime += s; const now = Date.now(); const left = Math.ceil((restEndTime - now) / 1000); updateTimerVisuals(left); };
 function startTimerMini() { if (durationInt) clearInterval(durationInt); const d = document.getElementById('mini-timer'); const barD = document.getElementById('bar-timer'); if (!activeWorkout || !activeWorkout.startTime) return; durationInt = setInterval(() => { const diff = Math.floor((Date.now() - activeWorkout.startTime) / 1000); const m = Math.floor(diff / 60); const s = diff % 60; const txt = `${m}:${s.toString().padStart(2, '0')}`; if (d) d.innerText = txt; if (barD) barD.innerText = txt; }, 1000); }
-window.promptRPE = () => { const radarCtx = document.getElementById('muscleRadarChart'); if (!radarCtx) return; if (radarChartInstance) radarChartInstance.destroy(); const muscleCounts = { "Pecho": 0, "Espalda": 0, "Pierna": 0, "Hombros": 0, "Brazos": 0, "Abs": 0 }; if (activeWorkout && activeWorkout.exs) { activeWorkout.exs.forEach(e => { const m = e.mInfo?.main || "General"; let key = ""; if (["Pecho", "Espalda", "Hombros", "Abs"].includes(m)) key = m; else if (["Cuádriceps", "Isquios", "Glúteos", "Gemelos"].includes(m)) key = "Pierna"; else if (["Bíceps", "Tríceps"].includes(m)) key = "Brazos"; if (key && muscleCounts.hasOwnProperty(key)) { const completedSets = e.sets?.filter(s => s.d).length || 0; muscleCounts[key] += completedSets; } }); } radarChartInstance = new Chart(radarCtx, { type: 'radar', data: { labels: Object.keys(muscleCounts), datasets: [{ label: 'Series Finalizadas', data: Object.values(muscleCounts), backgroundColor: 'rgba(255, 51, 51, 0.4)', borderColor: '#ff3333', borderWidth: 2, pointBackgroundColor: '#ff3333', pointBorderColor: '#fff', pointRadius: 3, pointHoverRadius: 5 }] }, options: { scales: { r: { beginAtZero: true, min: 0, ticks: { display: false, stepSize: 1 }, grid: { color: '#333' }, angleLines: { color: '#333' }, pointLabels: { color: '#ffffff', font: { size: 10 } } } }, plugins: { legend: { display: false } }, maintainAspectRatio: false, responsive: true } }); const notesEl = document.getElementById('workout-notes'); if (notesEl) notesEl.value = ''; window.openModal('modal-rpe'); };
+window.promptRPE = () => {
+    const muscleCounts = { "Pecho": 0, "Espalda": 0, "Pierna": 0, "Hombros": 0, "Brazos": 0, "Abs": 0 };
+    if (activeWorkout && activeWorkout.exs) {
+        activeWorkout.exs.forEach(e => {
+            const m = e.mInfo?.main || "General";
+            let key = "";
+            if (["Pecho", "Espalda", "Hombros", "Abs"].includes(m)) key = m;
+            else if (["Cuádriceps", "Isquios", "Glúteos", "Gemelos"].includes(m)) key = "Pierna";
+            else if (["Bíceps", "Tríceps"].includes(m)) key = "Brazos";
+            if (key && muscleCounts.hasOwnProperty(key)) {
+                const completedSets = e.sets?.filter(s => s.d).length || 0;
+                muscleCounts[key] += completedSets;
+            }
+        });
+    }
+    const intensities = {};
+    Object.entries(muscleCounts).forEach(([k, v]) => { if (v > 0) intensities[k] = 1.0; });
+    renderMuscleMap('muscleBodyMapRPE', intensities);
+    const notesEl = document.getElementById('workout-notes');
+    if (notesEl) notesEl.value = '';
+    window.openModal('modal-rpe');
+};
 function showToast(msg) { const container = document.getElementById('toast-container') || createToastContainer(); const t = document.createElement('div'); t.className = 'toast-msg'; t.innerHTML = msg; container.appendChild(t); setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 500); }, 4000); }
 function createToastContainer() { const div = document.createElement('div'); div.id = 'toast-container'; document.body.appendChild(div); return div; }
 async function compressAndCleanupWorkouts(uid) { try { const q = query(collection(db, "workouts"), where("uid", "==", uid), orderBy("date", "desc")); const snapshot = await getDocs(q); const docs = snapshot.docs; const KEEP_LIMIT = 30; if (docs.length <= KEEP_LIMIT) return; const docsToDelete = docs.slice(KEEP_LIMIT); const historyUpdates = []; const deletePromises = []; docsToDelete.forEach(docSnap => { const data = docSnap.data(); const dateSeconds = data.date?.seconds || Date.now() / 1000; if (data.details && Array.isArray(data.details)) { data.details.forEach(ex => { let maxWeight = 0, totalVol = 0, bestRep = 0; if (ex.s && Array.isArray(ex.s)) { ex.s.forEach(set => { const w = parseFloat(set.w) || 0; const r = parseInt(set.r) || 0; if (w > maxWeight) { maxWeight = w; bestRep = r; } totalVol += (w * r); }); } if (maxWeight > 0 || totalVol > 0) { historyUpdates.push({ d: dateSeconds, n: ex.n, w: maxWeight, r: bestRep, v: totalVol }); } }); } deletePromises.push(deleteDoc(doc(db, "workouts", docSnap.id))); }); if (historyUpdates.length > 0) { await updateDoc(doc(db, "users", uid), { compressedHistory: arrayUnion(...historyUpdates) }); } await Promise.all(deletePromises); console.log(`♻️ Limpieza auto: ${deletePromises.length} eliminados.`); } catch (e) { console.error("Error limpieza:", e); } }
@@ -1263,7 +1347,10 @@ window.openCoachView = async (uid, u) => {
         rList.appendChild(div);
     });
 
-    renderMuscleRadar('coachMuscleChart', freshU.muscleStats || {});
+    const coachMStats = freshU.muscleStats || {};
+    const maxCoachMuscle = Math.max(1, ...Object.values(coachMStats));
+    const coachIntensities = Object.fromEntries(Object.entries(coachMStats).filter(([, v]) => v > 0).map(([k, v]) => [k, v / maxCoachMuscle]));
+    renderMuscleMap('coachMuscleBodyMap', coachIntensities);
     const st = freshU.stats || {};
     document.getElementById('coach-stats-text').innerHTML = `<div class="stat-pill"><b>${st.workouts || 0}</b><span>ENTRENOS</span></div><div class="stat-pill"><b>${(st.totalKg / 1000 || 0).toFixed(1)}t</b><span>CARGA</span></div><div class="stat-pill"><b>${st.totalReps || 0}</b><span>REPS</span></div>`;
     if (freshU.weightHistory) { fixCoachChart('coachWeightChart'); injectChartFilter('coachWeightChart', 'window.updateWeightChart'); coachChart = renderFilteredChart('coachWeightChart', coachChart, freshU.weightHistory, 'weight', '#ff3333', 90); }

@@ -194,9 +194,8 @@
                     </div>
                 </div>
                 <div class="card">
-                    <h3>MAPA DE SIMETRÍA</h3>
-                    <div style="height:300px; width:100%; position:relative;"><canvas id="userMuscleChart"></canvas>
-                    </div>
+                    <h3>MAPA MUSCULAR</h3>
+                    <canvas id="userMuscleBodyMap" style="max-width:100%; height:auto; display:block; margin:0 auto;"></canvas>
                 </div>
                 <div class="card" id="user-photos-card">
                     <h3>EVOLUCIÓN FÍSICA</h3>
@@ -499,8 +498,7 @@
                 </div>
                 <div class="card">
                     <h3>MAPA MUSCULAR</h3>
-                    <div style="height:300px; width:100%; position:relative;"><canvas id="coachMuscleChart"></canvas>
-                    </div>
+                    <canvas id="coachMuscleBodyMap" style="max-width:100%; height:auto; display:block; margin:0 auto;"></canvas>
                 </div>
                 <div id="coach-view-bio" class="card hidden">
                     <h3>⚡ BIOIMPEDANCIA</h3>
@@ -660,7 +658,7 @@
     <div id="modal-rpe" class="modal">
         <div class="modal-content">
             <h3>FINALIZAR</h3>
-            <div style="height: 250px; width: 100%; margin-bottom: 15px;"><canvas id="muscleRadarChart"></canvas></div>
+            <div style="width:100%; margin-bottom:15px; text-align:center;"><canvas id="muscleBodyMapRPE" style="max-width:100%; height:auto; display:block; margin:0 auto;"></canvas></div>
             <p style="color:#888; margin-bottom:20px;">¿Dificultad?</p><button class="rpe-btn rpe-easy"
                 onclick="window.finishWorkout('Suave')">🟢 Suave / Moderado</button><button class="rpe-btn rpe-hard"
                 onclick="window.finishWorkout('Duro')">🟠 Duro / Intenso</button><button class="rpe-btn rpe-max"
