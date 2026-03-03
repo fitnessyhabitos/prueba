@@ -573,7 +573,6 @@ function renderMuscleRadar(canvasId, stats) {
 
 // --- MAPA MUSCULAR ---
 const MUSCLE_TO_FILE = {
-    // Claves Firestore (muscleStats) — capitalizadas
     'Pecho': ['pecho.png'],
     'Espalda': ['espalda.png'],
     'Cuádriceps': ['cuadriceps.png'],
@@ -586,27 +585,6 @@ const MUSCLE_TO_FILE = {
     'Abs': ['abs.png'],
     'Pierna': ['cuadriceps.png', 'isquios.png', 'gluteos.png', 'gemelos.png'],
     'Brazos': ['biceps.png', 'triceps.png'],
-    // Claves normalizadas (target/sec de ejercicios) — minúsculas
-    'abs': ['abs.png'],
-    'abductores': ['abductores.png'],
-    'aductores': ['aductores.png'],
-    'antebrazos': ['antebrazos.png'],
-    'biceps': ['biceps.png'],
-    'core': ['core.png'],
-    'cuadriceps': ['cuadriceps.png'],
-    'cuello': ['cuello.png'],
-    'dorsales': ['dorsales.png'],
-    'espalda': ['espalda.png'],
-    'espalda_alta': ['espalda_alta.png'],
-    'espalda_baja': ['espalda_baja.png'],
-    'gemelos': ['gemelos.png'],
-    'gluteos': ['gluteos.png'],
-    'hombros': ['hombros.png'],
-    'isquios': ['isquios.png'],
-    'manos': ['manos.png'],
-    'oblicuos': ['oblicuos.png'],
-    'pecho': ['pecho.png'],
-    'triceps': ['triceps.png'],
 };
 
 function loadImg(src) {
@@ -911,7 +889,7 @@ function renderWorkout() {
         if (userData.showVideos && e.video) {
             const isGif = e.video.toLowerCase().endsWith('.gif') || !e.video.includes('http');
             if (isGif) {
-                videoBtnHtml = `<button class="btn-small btn-outline" style="float:right; width:auto; margin:0; padding:2px 8px; border-color:#00ffff; color:#00ffff;" onclick="window.openGif('${e.video}', '${e.n.replace(/'/g, "\\'")}')">GIF</button>`;
+                videoBtnHtml = `<button class="btn-small btn-outline" style="float:right; width:auto; margin:0; padding:2px 8px; border-color:#00ffff; color:#00ffff;" onclick="window.openGif('${e.video}')">GIF</button>`;
             } else {
                 videoBtnHtml = `<button class="btn-small btn-outline" style="float:right; width:auto; margin:0; padding:2px 8px; border-color:#f00; color:#f55;" onclick="window.openVideo('${e.video}')">🎥</button>`;
             }
@@ -1346,41 +1324,7 @@ function syncHistoryInputsState() {
 
 window.openVideo = (url) => { if (!url) return; document.getElementById('youtube-frame').src = url; window.openModal('modal-video'); };
 window.closeVideo = () => { document.getElementById('youtube-frame').src = ''; window.closeModal('modal-video'); };
-window.openGif = (filename, exName) => {
-    if (!filename) return;
-    document.getElementById('gif-frame').src = `gif/${filename}`;
-
-    // Buscar el ejercicio por nombre o por gif filename
-    const ex = EXERCISES.find(e => e.n === exName) || EXERCISES.find(e => e.v === filename);
-
-    // Mini mapa muscular (target pleno, sec más suave)
-    const mapWrap = document.getElementById('gif-muscle-map-wrap');
-    if (mapWrap) {
-        if (ex && (ex.target || (ex.sec && ex.sec.length))) {
-            const intensities = {};
-            if (ex.target) intensities[ex.target] = 1.0;
-            (ex.sec || []).forEach(s => { if (s) intensities[s] = 0.45; });
-            renderMuscleMap('gif-muscle-map', intensities);
-            mapWrap.style.display = 'block';
-        } else { mapWrap.style.display = 'none'; }
-    }
-
-    // Instrucciones paso a paso
-    const instrEl = document.getElementById('gif-instructions');
-    if (instrEl) {
-        if (ex && ex.instructions && ex.instructions.length) {
-            instrEl.innerHTML = ex.instructions.map((step, i) =>
-                `<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start;">
-                   <span style="min-width:18px;font-weight:bold;color:var(--accent-color);font-size:0.8rem;">${i + 1}.</span>
-                   <span style="font-size:0.8rem;color:#ccc;line-height:1.4;">${step}</span>
-                 </div>`
-            ).join('');
-            instrEl.style.display = 'block';
-        } else { instrEl.style.display = 'none'; }
-    }
-
-    window.openModal('modal-gif');
-};
+window.openGif = (filename) => { if (!filename) return; document.getElementById('gif-frame').src = `gif/${filename}`; window.openModal('modal-gif'); };
 window.closeGif = () => { document.getElementById('gif-frame').src = ''; window.closeModal('modal-gif'); };
 
 window.saveHistoryChanges = async () => {
