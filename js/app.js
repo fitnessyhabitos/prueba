@@ -2,7 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, setDoc, getDoc, updateDoc, onSnapshot, query, where, addDoc, deleteDoc, getDocs, serverTimestamp, increment, orderBy, limit, arrayRemove, arrayUnion } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
-import { EXERCISES } from './data.js';
+import { EXERCISES } from './data junto.js';
 
 console.log("⚡ FIT DATA: App v16.0 (COACH MODE & ADVANCED EDIT)...");
 
@@ -880,32 +880,78 @@ window.initSwap = (idx) => { swapTargetIndex = idx; const currentEx = activeWork
 window.performSwap = (newName) => { if (swapTargetIndex === null) return; const data = getExerciseData(newName); const currentSets = activeWorkout.exs[swapTargetIndex].sets.map(s => ({ ...s, prev: '-', prevKg: '-', prevReps: '-', maxKg: '-', d: false })); activeWorkout.exs[swapTargetIndex].n = newName; activeWorkout.exs[swapTargetIndex].img = data.img; activeWorkout.exs[swapTargetIndex].video = data.v; activeWorkout.exs[swapTargetIndex].sets = currentSets; saveLocalWorkout(); renderWorkout(); window.closeModal('modal-swap'); };
 
 // --- RENDER WORKOUT ACTUALIZADO (Con Emoji 🥇 para Récord) ---
+// Tabla biomecánica de distribución muscular por tipo de ejercicio
+// Porcentajes basados en electromiografía (EMG) y biomecánica clásica
+const BIOMECH_COMPOUND = 0.70;   // músculo principal en compuesto
+const BIOMECH_ISOLATED = 0.92;   // músculo principal en aislado
+
+function buildMuscleBars(ex) {
+    // Buscar datos reales del ejercicio en EXERCISES para obtener sec correcto
+    const exData = EXERCISES.find(e => e.n === ex.n) ||
+        EXERCISES.find(e => normalizeText(e.n) === normalizeText(ex.n));
+
+    const isIsolated = (ex.type === 'i') || (exData && exData.t === 'i');
+    const mainMuscle = ex.mInfo?.main || 'General';
+    const secMuscles = exData?.sec && exData.sec.length ?
+        exData.sec : (ex.mInfo?.sec || []);
+
+    const mainPct = isIsolated ? BIOMECH_ISOLATED : BIOMECH_COMPOUND;
+    const remaining = parseFloat((1 - mainPct).toFixed(2));
+
+    let barsHtml = '';
+    barsHtml += `<div class="mini-bar-label"><span>${mainMuscle}</span><span>${Math.round(mainPct * 100)}%</span></div>`;
+    barsHtml += `<div class="mini-track"><div class="mini-fill fill-primary" style="width:${Math.round(mainPct * 100)}%"></div></div>`;
+
+    if (secMuscles.length > 0 && remaining > 0) {
+        // Distribuir porcentaje restante con pesos relativos
+        // Primer secundario recibe más (peso biomecánico real: primer secund. ~60% del resto)
+        const secWeights = secMuscles.map((_, idx) => {
+            if (idx === 0) return 0.55;
+            if (idx === 1) return 0.30;
+            return 0.15 / Math.max(1, secMuscles.length - 2);
+        });
+        const totalWeight = secWeights.reduce((a, b) => a + b, 0);
+
+        secMuscles.forEach((sec, idx) => {
+            const pct = Math.round((secWeights[idx] / totalWeight) * remaining * 100);
+            if (pct < 2) return;  // omitir músculos con < 2%
+            barsHtml += `<div class="mini-bar-label" style="margin-top:4px;"><span style="color:#888; font-size:0.75em;">${sec}</span><span style="color:#888; font-size:0.75em;">${pct}%</span></div>`;
+            barsHtml += `<div class="mini-track" style="height:4px; margin-bottom:2px;"><div class="mini-fill fill-secondary" style="width:${pct}%"></div></div>`;
+        });
+    }
+    return barsHtml;
+}
+
 function renderWorkout() {
     const c = document.getElementById('workout-exercises'); c.innerHTML = ''; document.getElementById('workout-title').innerText = activeWorkout.name;
     activeWorkout.exs.forEach((e, i) => {
         let cardStyle = "border-left:3px solid var(--accent-color);"; let connector = ""; if (e.superset) { cardStyle += " margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: 1px dashed #444;"; connector = `<div style="text-align:center; background:var(--card-color); color:var(--accent-color); font-size:1.2rem; line-height:0.5;">🔗</div>`; } else if (i > 0 && activeWorkout.exs[i - 1].superset) cardStyle += " border-top-left-radius: 0; border-top-right-radius: 0; margin-top:0;";
         const card = document.createElement('div'); card.className = 'card'; card.style.cssText = cardStyle; card.setAttribute('data-name', e.n);
-        let videoBtnHtml = '';
+
+        // Botones que aparecen SOLO al expandir
+        let infoBtnHtml = '';
         if (userData.showVideos && e.video) {
             const isGif = e.video.toLowerCase().endsWith('.gif') || !e.video.includes('http');
             if (isGif) {
-                videoBtnHtml = `<button class="btn-small btn-outline" style="float:right; width:auto; margin:0; padding:2px 8px; border-color:#00ffff; color:#00ffff;" onclick="window.openGif('${e.video}')">GIF</button>`;
+                infoBtnHtml = `<button class="btn-small btn-outline" style="width:auto; margin:0 5px 0 0; padding:2px 10px; border-color:#ff3333; color:#ff3333; font-size:1rem;" onclick="window.openInfo('${e.n}', '${e.video}')">ℹ️</button>`;
             } else {
-                videoBtnHtml = `<button class="btn-small btn-outline" style="float:right; width:auto; margin:0; padding:2px 8px; border-color:#f00; color:#f55;" onclick="window.openVideo('${e.video}')">🎥</button>`;
+                infoBtnHtml = `<button class="btn-small btn-outline" style="width:auto; margin:0 5px 0 0; padding:2px 8px; border-color:#f00; color:#f55;" onclick="window.openVideo('${e.video}')">🎥</button>`;
             }
+        } else if (userData.showVideos) {
+            // Sin GIF pero puede tener instrucciones
+            infoBtnHtml = `<button class="btn-small btn-outline" style="width:auto; margin:0 5px 0 0; padding:2px 10px; border-color:#ff3333; color:#ff3333; font-size:1rem;" onclick="window.openInfo('${e.n}', '')">ℹ️</button>`;
         }
-        const swapBtn = `<button class="btn-small btn-outline" style="float:right; width:auto; margin:0 5px 0 0; padding:2px 8px; border-color:#aaa; color:#fff;" onclick="window.initSwap(${i})">🔄</button>`;
+        const swapBtn = `<button class="btn-small btn-outline" style="width:auto; margin:0 5px 0 0; padding:2px 8px; border-color:#aaa; color:#fff;" onclick="window.initSwap(${i})">🔄</button>`;
         const hasNote = e.note && e.note.length > 0; const noteBtn = `<button class="ex-note-btn ${hasNote ? 'has-note' : ''}" onclick="window.openNoteModal(${i})">📝</button>`;
-        let bars = (e.type === 'i') ? `<div class="mini-bar-label"><span>${e.mInfo.main}</span><span>100%</span></div><div class="mini-track"><div class="mini-fill fill-primary"></div></div>` : `<div class="mini-bar-label"><span>${e.mInfo.main}</span><span>70%</span></div><div class="mini-track"><div class="mini-fill fill-primary" style="width:70%"></div></div>`;
+
+        const bars = buildMuscleBars(e);
 
         let setsHtml = `<div class="set-header"><div>#</div><div>PREV</div><div>REPS</div><div>KG</div><div></div></div>`;
         e.sets.forEach((s, j) => {
             const weightVal = s.w === 0 ? '' : s.w; const isDisabled = s.d ? 'disabled' : ''; const rowOpacity = s.d ? 'opacity:0.5; pointer-events:none;' : ''; const isDropClass = s.isDrop ? 'is-dropset' : ''; const displayNum = s.numDisplay || (j + 1);
             let dropActionBtn = !s.d ? (s.isDrop ? `<button class="btn-small btn-outline" style="padding:2px 6px; font-size:0.7rem; border-color:#f55; color:#f55; margin-left:auto;" onclick="window.removeSpecificSet(${i},${j})">✕</button>` : `<button class="btn-small btn-outline" style="padding:2px; font-size:0.5rem; border-color:var(--warning-color); color:var(--warning-color);" onclick="window.addDropset(${i},${j})">DROP</button>`) : '';
 
-            // Textos Históricos optimizados:
             const prevText = s.prev !== '-' ? s.prev : '-';
-            // AQUÍ ESTÁ EL CAMBIO: Quitamos "Máx:" y ponemos el emoji de la medalla
             const maxText = s.maxKg !== '-' ? `🥇 ${s.maxKg}kg` : '';
 
             const histHtml = `<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.2; width:100%; overflow:hidden;">
@@ -921,9 +967,14 @@ function renderWorkout() {
 
         const isCollapsed = e.collapsed === undefined ? true : e.collapsed;
         const toggleIcon = isCollapsed ? '▼' : '▲';
-        const headerHtml = `<h3 style="margin-bottom:0; border:none; display:flex; align-items:center; justify-content:space-between; cursor:pointer;" onclick="window.toggleExerciseCard(${i})"><span style="display:flex; align-items:center; gap:8px;"><span class="exercise-drag-handle" style="cursor:grab; font-size:1.2rem; color:#666;" onclick="event.stopPropagation()">☰</span> ${e.n} <span style="font-size:0.8em;color:#aaa;">${toggleIcon}</span></span><div onclick="event.stopPropagation()">${noteBtn} ${videoBtnHtml} ${swapBtn}</div></h3>`;
+
+        // HEADER: solo nombre + drag handle + flecha (sin botones)
+        const headerHtml = `<h3 style="margin-bottom:0; border:none; display:flex; align-items:center; justify-content:space-between; cursor:pointer;" onclick="window.toggleExerciseCard(${i})"><span style="display:flex; align-items:center; gap:8px;"><span class="exercise-drag-handle" style="cursor:grab; font-size:1.2rem; color:#666;" onclick="event.stopPropagation()">☰</span> ${e.n}</span><span style="font-size:0.8em; color:#aaa; padding-right:4px;">${toggleIcon}</span></h3>`;
+
+        // CONTENIDO: aparece botones nota/info/swap + visual + sets
         const contentStyle = isCollapsed ? 'display:none;' : 'margin-top:10px;';
-        const contentHtml = `<div style="${contentStyle}"><div class="workout-split"><div class="workout-visual"><img src="${e.img}" onerror="this.src='logo.png'"></div><div class="workout-bars" style="width:100%">${bars}</div></div>${setsHtml}</div>`;
+        const actionRowHtml = `<div style="display:flex; gap:6px; align-items:center; margin-bottom:10px; justify-content:flex-end;" onclick="event.stopPropagation()">${noteBtn} ${infoBtnHtml} ${swapBtn}</div>`;
+        const contentHtml = `<div style="${contentStyle}">${actionRowHtml}<div class="workout-split"><div class="workout-visual"><img src="${e.img}" onerror="this.src='logo.png'"></div><div class="workout-bars" style="width:100%">${bars}</div></div>${setsHtml}</div>`;
 
         card.innerHTML = headerHtml + contentHtml;
         c.appendChild(card); if (e.superset) c.innerHTML += connector;
@@ -1326,6 +1377,56 @@ window.openVideo = (url) => { if (!url) return; document.getElementById('youtube
 window.closeVideo = () => { document.getElementById('youtube-frame').src = ''; window.closeModal('modal-video'); };
 window.openGif = (filename) => { if (!filename) return; document.getElementById('gif-frame').src = `gif/${filename}`; window.openModal('modal-gif'); };
 window.closeGif = () => { document.getElementById('gif-frame').src = ''; window.closeModal('modal-gif'); };
+
+// --- MODAL INFO (GIF + instrucciones) ---
+window.openInfo = (exName, gifFile) => {
+    const exData = EXERCISES.find(e => e.n === exName) ||
+        EXERCISES.find(e => normalizeText(e.n) === normalizeText(exName));
+
+    const gifEl = document.getElementById('info-gif');
+    const staticEl = document.getElementById('info-static-img');
+    const instrEl = document.getElementById('info-instructions');
+    const titleEl = document.getElementById('info-title');
+
+    if (titleEl) titleEl.innerText = exName;
+
+    // GIF o imagen estática
+    if (gifFile && gifEl) {
+        gifEl.src = `gif/${gifFile}`;
+        gifEl.style.display = 'block';
+        if (staticEl) staticEl.style.display = 'none';
+    } else if (exData?.img && staticEl) {
+        staticEl.src = exData.img;
+        staticEl.style.display = 'block';
+        if (gifEl) gifEl.style.display = 'none';
+    } else {
+        if (gifEl) gifEl.style.display = 'none';
+        if (staticEl) staticEl.style.display = 'none';
+    }
+
+    // Instrucciones
+    if (instrEl) {
+        const instructions = exData?.instructions || [];
+        if (instructions.length > 0) {
+            instrEl.innerHTML = instructions.map((step, i) =>
+                `<div style="display:flex; gap:10px; margin-bottom:10px; align-items:flex-start;">
+                    <span style="min-width:22px; height:22px; border-radius:50%; background:var(--accent-color); color:#000; font-weight:bold; font-size:0.75rem; display:flex; align-items:center; justify-content:center; flex-shrink:0;">${i + 1}</span>
+                    <span style="color:#ddd; font-size:0.85rem; line-height:1.4;">${step}</span>
+                </div>`
+            ).join('');
+        } else {
+            instrEl.innerHTML = '<p style="color:#666; font-size:0.85rem; text-align:center;">Sin instrucciones disponibles.</p>';
+        }
+    }
+    window.openModal('modal-gif');
+};
+window.closeInfo = () => {
+    const gifEl = document.getElementById('info-gif');
+    const staticEl = document.getElementById('info-static-img');
+    if (gifEl) gifEl.src = '';
+    if (staticEl) staticEl.src = '';
+    window.closeModal('modal-gif');
+};
 
 window.saveHistoryChanges = async () => {
     syncHistoryInputsState(); // Asegurar últimos datos
