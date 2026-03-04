@@ -4,7 +4,7 @@ import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 import { EXERCISES } from './data junto.js';
 
-console.log("⚡ FIT DATA: App v16.0 (COACH MODE & ADVANCED EDIT)...");
+console.log("⚡ FIT DATA: App v16.1 (COACH MODE & PAYWALL)...");
 
 // --- 1. REGISTRO SERVICE WORKER ---
 if ('serviceWorker' in navigator) {
