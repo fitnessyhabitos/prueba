@@ -182,6 +182,22 @@ onAuthStateChanged(auth, async (user) => {
                 }
 
                 if (userData.approved) {
+                    // SI ES ATLETA normal Y su appActive es explicitamente false, bloquear.
+                    // Nota: Si appActive es unedfined se asume true por legacy, a menos que queramos bloquear a los nuevos por defecto.
+                    // El usuario dijo "a la gente nueva se le bloquea hasta que verifiques Bizum".
+                    // Esto significa appActive === false bloquea, appActive === undefined también bloquea si es atleta nuevo sin plan?
+                    // Mejor: si no está definido asume verdadero *solo* para los que ya estaban o para coaches.
+                    const isCoach = userData.role === 'admin' || userData.role === 'assistant';
+                    const isLocked = !isCoach && userData.appActive === false;
+
+                    if (isLocked) {
+                        if (loadingScreen) { loadingScreen.style.opacity = '0'; setTimeout(() => loadingScreen.classList.add('hidden'), 300); }
+                        document.getElementById('paywall-screen').style.display = 'flex';
+                        return; // Detiene la carga del resto de la app
+                    } else {
+                        document.getElementById('paywall-screen').style.display = 'none';
+                    }
+
                     if (loadingScreen) { loadingScreen.style.opacity = '0'; setTimeout(() => loadingScreen.classList.add('hidden'), 300); }
                     document.getElementById('main-header').classList.remove('hidden');
                     loadRoutines();
@@ -192,6 +208,19 @@ onAuthStateChanged(auth, async (user) => {
                         showToast("⚡ Sesión restaurada");
                     } else {
                         switchTab('routines-view');
+                    }
+
+                    // Actualizar Badge del plan en Perfil
+                    const pCard = document.getElementById('user-subscription-card');
+                    if (pCard && !isCoach) {
+                        if (userData.currentPlan) {
+                            pCard.style.display = 'block';
+                            document.getElementById('user-plan-name').innerText = userData.currentPlan;
+                            const sessions = userData.presentialSessions || 0;
+                            document.getElementById('user-sessions-text').innerText = sessions > 0 ? `${sessions} Sesiones Presenciales disponibles` : 'Sin sesiones físicas pendientes';
+                        } else {
+                            pCard.style.display = 'none';
+                        }
                     }
 
                 } else { alert("Cuenta en revisión."); signOut(auth); }
@@ -885,26 +914,21 @@ window.performSwap = (newName) => { if (swapTargetIndex === null) return; const 
 const BIOMECH_COMPOUND = 0.70;   // músculo principal en compuesto
 const BIOMECH_ISOLATED = 0.92;   // músculo principal en aislado
 
-function buildMuscleBars(ex) {
-    // Buscar datos reales del ejercicio en EXERCISES para obtener sec correcto
+// Función compartida para calcular los pesos biomecánicos de un ejercicio
+function calcBiomechanicalWeights(ex) {
     const exData = EXERCISES.find(e => e.n === ex.n) ||
         EXERCISES.find(e => normalizeText(e.n) === normalizeText(ex.n));
 
     const isIsolated = (ex.type === 'i') || (exData && exData.t === 'i');
     const mainMuscle = ex.mInfo?.main || 'General';
-    const secMuscles = exData?.sec && exData.sec.length ?
-        exData.sec : (ex.mInfo?.sec || []);
+    const secMuscles = exData?.sec && exData.sec.length ? exData.sec : (ex.mInfo?.sec || []);
 
     const mainPct = isIsolated ? BIOMECH_ISOLATED : BIOMECH_COMPOUND;
     const remaining = parseFloat((1 - mainPct).toFixed(2));
 
-    let barsHtml = '';
-    barsHtml += `<div class="mini-bar-label"><span>${mainMuscle}</span><span>${Math.round(mainPct * 100)}%</span></div>`;
-    barsHtml += `<div class="mini-track"><div class="mini-fill fill-primary" style="width:${Math.round(mainPct * 100)}%"></div></div>`;
+    const result = { [mainMuscle]: mainPct };
 
     if (secMuscles.length > 0 && remaining > 0) {
-        // Distribuir porcentaje restante con pesos relativos
-        // Primer secundario recibe más (peso biomecánico real: primer secund. ~60% del resto)
         const secWeights = secMuscles.map((_, idx) => {
             if (idx === 0) return 0.55;
             if (idx === 1) return 0.30;
@@ -913,11 +937,44 @@ function buildMuscleBars(ex) {
         const totalWeight = secWeights.reduce((a, b) => a + b, 0);
 
         secMuscles.forEach((sec, idx) => {
-            const pct = Math.round((secWeights[idx] / totalWeight) * remaining * 100);
-            if (pct < 2) return;  // omitir músculos con < 2%
-            barsHtml += `<div class="mini-bar-label" style="margin-top:4px;"><span style="color:#888; font-size:0.75em;">${sec}</span><span style="color:#888; font-size:0.75em;">${pct}%</span></div>`;
-            barsHtml += `<div class="mini-track" style="height:4px; margin-bottom:2px;"><div class="mini-fill fill-secondary" style="width:${pct}%"></div></div>`;
+            const pct = (secWeights[idx] / totalWeight) * remaining;
+            if (pct >= 0.02) {  // omitir músculos con < 2%
+                // Mapear algunos nombres secundarios (que puedan venir del JSON) a los nombres de la UI ("mInfo.main")
+                const MAP = {
+                    "cuadriceps": "Cuádriceps", "isquios": "Isquios", "gluteos": "Glúteos", "abductores": "Abductores", "aductores": "Aductores", "gemelos": "Gemelos",
+                    "dorsales": "Dorsales", "espalda_alta": "Espalda Alta", "espalda_baja": "Espalda Baja",
+                    "pecho": "Pecho", "hombros": "Hombros", "hombros_frontal": "Hombros", "hombros_posterior": "Hombros",
+                    "biceps": "Bíceps", "triceps": "Tríceps", "antebrazo": "Antebrazo",
+                    "abs": "Abs", "oblicuos": "Abs", "core": "Abs", "core_inferior": "Abs",
+                    "cardio": "Varios", "cardiovascular": "Varios", "full_body": "Varios", "hiit": "Varios"
+                };
+                const finalName = MAP[sec] || sec;
+
+                result[finalName] = (result[finalName] || 0) + pct;
+            }
         });
+    }
+    return result;
+}
+
+function buildMuscleBars(ex) {
+    const weights = calcBiomechanicalWeights(ex);
+
+    // El principal siempre será el primero y tendrá el valor más alto (o podemos sacarlo de mInfo.main)
+    const mainMuscle = ex.mInfo?.main || 'General';
+    const mainPct = weights[mainMuscle] || (ex.type === 'i' ? BIOMECH_ISOLATED : BIOMECH_COMPOUND);
+
+    let barsHtml = '';
+    barsHtml += `<div class="mini-bar-label"><span>${mainMuscle}</span><span>${Math.round(mainPct * 100)}%</span></div>`;
+    barsHtml += `<div class="mini-track"><div class="mini-fill fill-primary" style="width:${Math.round(mainPct * 100)}%"></div></div>`;
+
+    // Secundarios
+    for (const [mName, wPct] of Object.entries(weights)) {
+        if (mName === mainMuscle) continue;
+        const pctRound = Math.round(wPct * 100);
+        if (pctRound < 2) continue;
+        barsHtml += `<div class="mini-bar-label" style="margin-top:4px;"><span style="color:#888; font-size:0.75em;">${mName}</span><span style="color:#888; font-size:0.75em;">${pctRound}%</span></div>`;
+        barsHtml += `<div class="mini-track" style="height:4px; margin-bottom:2px;"><div class="mini-fill fill-secondary" style="width:${pctRound}%"></div></div>`;
     }
     return barsHtml;
 }
@@ -1079,19 +1136,29 @@ window.promptRPE = () => {
     const muscleCounts = { "Pecho": 0, "Espalda": 0, "Pierna": 0, "Hombros": 0, "Brazos": 0, "Abs": 0 };
     if (activeWorkout && activeWorkout.exs) {
         activeWorkout.exs.forEach(e => {
-            const m = e.mInfo?.main || "General";
-            let key = "";
-            if (["Pecho", "Espalda", "Hombros", "Abs"].includes(m)) key = m;
-            else if (["Cuádriceps", "Isquios", "Glúteos", "Gemelos"].includes(m)) key = "Pierna";
-            else if (["Bíceps", "Tríceps"].includes(m)) key = "Brazos";
-            if (key && muscleCounts.hasOwnProperty(key)) {
-                const completedSets = e.sets?.filter(s => s.d).length || 0;
-                muscleCounts[key] += completedSets;
+            const completedSets = e.sets?.filter(s => s.d).length || 0;
+            if (completedSets > 0) {
+                const weights = calcBiomechanicalWeights(e);
+                for (const [mName, wVal] of Object.entries(weights)) {
+                    let key = "";
+                    if (["Pecho", "Espalda Alta", "Dorsales", "Espalda Baja", "Hombros", "Abs"].includes(mName)) {
+                        key = mName === "Espalda Alta" || mName === "Dorsales" || mName === "Espalda Baja" ? "Espalda" : mName;
+                    }
+                    else if (["Cuádriceps", "Isquios", "Glúteos", "Gemelos", "Abductores", "Aductores"].includes(mName)) key = "Pierna";
+                    else if (["Bíceps", "Tríceps", "Antebrazo"].includes(mName)) key = "Brazos";
+
+                    if (key && muscleCounts.hasOwnProperty(key)) {
+                        muscleCounts[key] += (wVal * completedSets);
+                    }
+                }
             }
         });
     }
     const intensities = {};
-    Object.entries(muscleCounts).forEach(([k, v]) => { if (v > 0) intensities[k] = 1.0; });
+    const maxVal = Math.max(1, ...Object.values(muscleCounts));
+    Object.entries(muscleCounts).forEach(([k, v]) => {
+        if (v > 0) intensities[k] = v / maxVal; // Normalizar para el mapa visual de 0 a 1
+    });
     renderMuscleMap('muscleBodyMapRPE', intensities);
     const notesEl = document.getElementById('workout-notes');
     if (notesEl) notesEl.value = '';
@@ -1139,8 +1206,15 @@ window.finishWorkout = async (rpeVal) => {
                 const w = parseFloat(set.w) || 0;
                 if (w === 0) missingWeights = true;
                 totalSets++; totalReps += r; totalKg += (r * w);
-                const mName = e.mInfo?.main || "General";
-                muscleCounts[mName] = (muscleCounts[mName] || 0) + 1;
+                // Guardar la distribución biomecánica en vez de solo 1 al principal
+                const weights = calcBiomechanicalWeights(e);
+                for (const [mName, wVal] of Object.entries(weights)) {
+                    // Mapeo seguro a los campos esperados en la DB si vienen de secundarios raros
+                    let finalName = mName === "Espalda Alta" || mName === "Dorsales" || mName === "Espalda Baja" ? "Espalda" : mName;
+                    if (finalName === "Abductores" || finalName === "Aductores") finalName = "Pierna"; // simplificación por seguridad db
+
+                    muscleCounts[finalName] = (muscleCounts[finalName] || 0) + wVal;
+                }
 
                 // Actualizar Record de Serie en memoria
                 if (w > (currentExMaxes[idx] || 0)) {
@@ -1481,6 +1555,12 @@ window.openCoachView = async (uid, u) => {
     const togglePhotos = document.getElementById('coach-toggle-photos');
     if (togglePhotos) { togglePhotos.checked = freshU.showPhotos !== false; }
 
+    // --- SUBSCRIPTION CARD UPDATE ---
+    document.getElementById('coach-toggle-app-active').checked = freshU.appActive !== false;
+    document.getElementById('coach-plan-type-select').value = freshU.currentPlan || "";
+    document.getElementById('coach-presential-sessions').innerText = freshU.presentialSessions || 0;
+    // --------------------------------
+
     const existingTg = document.getElementById('coach-telegram-row');
     if (existingTg) existingTg.remove();
     const videoToggleEl = document.getElementById('coach-toggle-videos');
@@ -1536,3 +1616,41 @@ window.deleteUser = async () => { if (!selectedUserCoach) return; const confirmN
 window.goToCreateRoutine = () => { window.openEditor(null, false); };
 document.getElementById('btn-register').onclick = async () => { const secretCode = document.getElementById('reg-code').value; const tgUser = document.getElementById('reg-telegram')?.value || ""; try { const c = await createUserWithEmailAndPassword(auth, document.getElementById('reg-email').value, document.getElementById('reg-pass').value); await setDoc(doc(db, "users", c.user.uid), { name: document.getElementById('reg-name').value, email: document.getElementById('reg-email').value, secretCode: secretCode, telegram: tgUser, approved: false, role: 'athlete', gender: document.getElementById('reg-gender').value, age: parseInt(document.getElementById('reg-age').value), height: parseInt(document.getElementById('reg-height').value), weightHistory: [], measureHistory: [], skinfoldHistory: [], bioHistory: [], prs: {}, stats: { workouts: 0, totalKg: 0, totalSets: 0, totalReps: 0 }, muscleStats: {}, joined: serverTimestamp(), showVideos: false, showBio: false, showPhotos: false }); } catch (e) { alert("Error: " + e.message); } };
 document.getElementById('btn-login').onclick = () => signInWithEmailAndPassword(auth, document.getElementById('login-email').value, document.getElementById('login-pass').value).catch(e => alert(e.message));
+
+// --- SUBSCRIPTION & PAYWALL ACTIONS ---
+window.toggleUserAppActive = async (isActive) => {
+    if (!selectedUserCoach) return;
+    try {
+        await updateDoc(doc(db, "users", selectedUserCoach), { appActive: isActive });
+        showToast(`📲 App ${isActive ? 'ACTIVADA' : 'BLOQUEADA'} para este usuario.`);
+    } catch (e) { alert("Error: " + e.message); }
+};
+
+window.changeUserPlanType = async (planName) => {
+    if (!selectedUserCoach) return;
+    try {
+        await updateDoc(doc(db, "users", selectedUserCoach), { currentPlan: planName });
+        showToast(`📋 Plan cambiado a: ${planName || 'Ninguno'}`);
+    } catch (e) { alert("Error al cambiar plan."); }
+};
+
+window.updatePresentialSessions = async (diff) => {
+    if (!selectedUserCoach || !selectedUserObj) return;
+    const current = selectedUserObj.presentialSessions || 0;
+    const newCount = Math.max(0, current + diff);
+    try {
+        await updateDoc(doc(db, "users", selectedUserCoach), { presentialSessions: newCount });
+        selectedUserObj.presentialSessions = newCount;
+        document.getElementById('coach-presential-sessions').innerText = newCount;
+    } catch (e) { alert("Error al actualizar sesiones."); }
+};
+
+window.contactCoachWa = () => {
+    const msg = encodeURIComponent("Hola Toni, quiero renovar/activar mi plan en Fit Data Pro o he realizado el Bizum.");
+    window.open(`https://wa.me/34614056363?text=${msg}`, '_blank');
+};
+
+window.notifyPaymentReady = () => {
+    const msg = encodeURIComponent("Hola Toni, ya he realizado el Bizum con mi nombre completo para activar mi cuenta en Fit Data Pro. Quedo a la espera. 🙌");
+    window.open(`https://wa.me/34614056363?text=${msg}`, '_blank');
+};

@@ -195,8 +195,11 @@
                 </div>
                 <div class="card">
                     <h3>MAPA MUSCULAR</h3>
-                    <canvas id="userMuscleBodyMap" style="max-width:100%; height:auto; display:block; margin:0 auto;"></canvas>
-                    <div id="userMuscleRadarWrap" style="height:280px; width:100%; position:relative; display:none; margin-top:8px;"><canvas id="userMuscleChart"></canvas></div>
+                    <canvas id="userMuscleBodyMap"
+                        style="max-width:100%; height:auto; display:block; margin:0 auto;"></canvas>
+                    <div id="userMuscleRadarWrap"
+                        style="height:280px; width:100%; position:relative; display:none; margin-top:8px;"><canvas
+                            id="userMuscleChart"></canvas></div>
                 </div>
                 <div class="card" id="user-photos-card">
                     <h3>EVOLUCIÓN FÍSICA</h3>
@@ -345,14 +348,18 @@
                         <label class="switch"><input type="checkbox" id="cfg-ranking"
                                 onchange="window.toggleRankingOptIn(this.checked)"><span class="slider"></span></label>
                     </div>
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #333; padding-top:10px;">
+                    <div
+                        style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #333; padding-top:10px;">
                         <div><span>Vista Muscular</span>
                             <small style="color:#666; font-size:0.65rem; display:block;">Perfil → Progreso</small>
                         </div>
                         <div style="display:flex; gap:4px;">
-                            <button id="mvt-map" onclick="window.setMuscleView('map')" style="margin:0; padding:4px 9px; font-size:0.7rem; border:1px solid #555; border-radius:6px; background:var(--accent-color); color:#000; cursor:pointer; font-weight:bold;">Silueta</button>
-                            <button id="mvt-radar" onclick="window.setMuscleView('radar')" style="margin:0; padding:4px 9px; font-size:0.7rem; border:1px solid #555; border-radius:6px; background:transparent; color:#fff; cursor:pointer; font-weight:bold;">Radar</button>
-                            <button id="mvt-both" onclick="window.setMuscleView('both')" style="margin:0; padding:4px 9px; font-size:0.7rem; border:1px solid #555; border-radius:6px; background:transparent; color:#fff; cursor:pointer; font-weight:bold;">Ambas</button>
+                            <button id="mvt-map" onclick="window.setMuscleView('map')"
+                                style="margin:0; padding:4px 9px; font-size:0.7rem; border:1px solid #555; border-radius:6px; background:var(--accent-color); color:#000; cursor:pointer; font-weight:bold;">Silueta</button>
+                            <button id="mvt-radar" onclick="window.setMuscleView('radar')"
+                                style="margin:0; padding:4px 9px; font-size:0.7rem; border:1px solid #555; border-radius:6px; background:transparent; color:#fff; cursor:pointer; font-weight:bold;">Radar</button>
+                            <button id="mvt-both" onclick="window.setMuscleView('both')"
+                                style="margin:0; padding:4px 9px; font-size:0.7rem; border:1px solid #555; border-radius:6px; background:transparent; color:#fff; cursor:pointer; font-weight:bold;">Ambas</button>
                         </div>
                     </div>
                     <button class="btn-outline" style="margin-top:15px;" onclick="window.saveConfig()">GUARDAR
@@ -509,8 +516,10 @@
                 </div>
                 <div class="card">
                     <h3>MAPA MUSCULAR</h3>
-                    <canvas id="coachMuscleBodyMap" style="max-width:100%; height:auto; display:block; margin:0 auto;"></canvas>
-                    <div style="height:280px; width:100%; position:relative; margin-top:8px;"><canvas id="coachMuscleChart"></canvas></div>
+                    <canvas id="coachMuscleBodyMap"
+                        style="max-width:100%; height:auto; display:block; margin:0 auto;"></canvas>
+                    <div style="height:280px; width:100%; position:relative; margin-top:8px;"><canvas
+                            id="coachMuscleChart"></canvas></div>
                 </div>
                 <div id="coach-view-bio" class="card hidden">
                     <h3>⚡ BIOIMPEDANCIA</h3>
@@ -550,6 +559,45 @@
                             <option>Cargando planes...</option>
                         </select><button class="btn-small btn" style="width:auto; padding:0 15px;"
                             onclick="window.assignPlan()">ASIGNAR PLAN</button></div>
+                </div>
+                <div class="card" id="coach-subscription-card">
+                    <h3>💎 SUSCRIPCIÓN Y ACCESO</h3>
+                    <div
+                        style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #333; padding-bottom:10px;">
+                        <span style="font-weight:bold; color:var(--accent-color);">Acceso a la App</span>
+                        <label class="switch">
+                            <input type="checkbox" id="coach-toggle-app-active"
+                                onchange="window.toggleUserAppActive(this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div style="margin-bottom:15px;">
+                        <label style="font-size:0.75rem; color:#aaa; display:block; margin-bottom:5px;">Plan
+                            Contratado</label>
+                        <select id="coach-plan-type-select" onchange="window.changeUserPlanType(this.value)">
+                            <option value="">-- Selecciona el Plan --</option>
+                            <option value="Sesión de Prueba">Sesión de Prueba (40€)</option>
+                            <option value="Plan App">Plan App (25€/mes)</option>
+                            <option value="Plan Preparación">Plan Preparación (70€/mes)</option>
+                            <option value="Plan 4 Sesiones">Plan 4 Sesiones (170€/mes)</option>
+                            <option value="Plan 8 Sesiones">Plan 8 Sesiones (290€/mes)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:0.75rem; color:#aaa; display:block; margin-bottom:5px;">Sesiones Físicas
+                            Disponibles</label>
+                        <div
+                            style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#1a1a1a; padding:10px; border-radius:8px; border:1px solid #333;">
+                            <button class="btn-outline"
+                                style="width:50px; height:50px; margin:0; font-size:1.5rem; color:#f55; border-color:#f55;"
+                                onclick="window.updatePresentialSessions(-1)">-</button>
+                            <span id="coach-presential-sessions"
+                                style="font-weight:bold; font-size:2rem; color:white;">0</span>
+                            <button class="btn-outline"
+                                style="width:50px; height:50px; margin:0; font-size:1.5rem; color:#0f8; border-color:#0f8;"
+                                onclick="window.updatePresentialSessions(1)">+</button>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="card" id="coach-config-card">
@@ -670,7 +718,8 @@
     <div id="modal-rpe" class="modal">
         <div class="modal-content">
             <h3>FINALIZAR</h3>
-            <div style="width:100%; margin-bottom:15px; text-align:center;"><canvas id="muscleBodyMapRPE" style="max-width:100%; height:auto; display:block; margin:0 auto;"></canvas></div>
+            <div style="width:100%; margin-bottom:15px; text-align:center;"><canvas id="muscleBodyMapRPE"
+                    style="max-width:100%; height:auto; display:block; margin:0 auto;"></canvas></div>
             <p style="color:#888; margin-bottom:20px;">¿Dificultad?</p><button class="rpe-btn rpe-easy"
                 onclick="window.finishWorkout('Suave')">🟢 Suave / Moderado</button><button class="rpe-btn rpe-hard"
                 onclick="window.finishWorkout('Duro')">🟠 Duro / Intenso</button><button class="rpe-btn rpe-max"
@@ -713,14 +762,20 @@
         <div class="modal-content"
             style="width:100%; max-width:420px; padding:0; background:var(--card-color); border:1px solid var(--accent-color); overflow:hidden; display:flex; flex-direction:column; max-height:90vh;">
             <!-- Header -->
-            <div style="padding:12px 15px 10px; border-bottom:1px solid #222; display:flex; align-items:center; gap:10px;">
+            <div
+                style="padding:12px 15px 10px; border-bottom:1px solid #222; display:flex; align-items:center; gap:10px;">
                 <span style="color:var(--accent-color); font-size:1.1rem;">ℹ️</span>
-                <h3 id="info-title" style="margin:0; font-size:0.95rem; color:white; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></h3>
+                <h3 id="info-title"
+                    style="margin:0; font-size:0.95rem; color:white; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                </h3>
             </div>
             <!-- GIF / imagen -->
             <div style="background:#000; text-align:center; flex-shrink:0;">
-                <img id="info-gif" style="width:100%; max-height:220px; object-fit:contain; display:none;" src="" alt="Animación ejercicio">
-                <img id="info-static-img" style="width:80px; height:80px; object-fit:contain; display:none; margin:12px auto;" src="" alt="Imagen ejercicio">
+                <img id="info-gif" style="width:100%; max-height:220px; object-fit:contain; display:none;" src=""
+                    alt="Animación ejercicio">
+                <img id="info-static-img"
+                    style="width:80px; height:80px; object-fit:contain; display:none; margin:12px auto;" src=""
+                    alt="Imagen ejercicio">
             </div>
             <!-- Instrucciones (scrollable) -->
             <div id="info-instructions" style="padding:15px; overflow-y:auto; flex:1; min-height:80px;"></div>
