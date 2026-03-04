@@ -627,6 +627,11 @@ input:focus {
   width: 50%;
 }
 
+.fill-secondary {
+  background: #ff8844;
+  opacity: 0.7;
+}
+
 .set-header {
   display: grid;
   grid-template-columns: 20px 0.6fr 1fr 1fr 40px;
