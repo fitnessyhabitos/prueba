@@ -1,5 +1,5 @@
 // sw.js - Service Worker para Fit Data Pro
-const CACHE_NAME = 'fit-data-v12-21-cache';
+const CACHE_NAME = 'fit-data-v12-22-cache';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
