@@ -1411,7 +1411,7 @@ window.viewWorkoutDetails = (wId, routineName, detailsStr, noteStr, timeStr = ""
         const radarWrap = document.getElementById('historyMuscleRadarWrap');
 
         if (mapsContainer && currentHistoryDetails && currentHistoryDetails.length > 0) {
-            let workoutMuscleCounts = { pecho: 0, espalda_dorsal: 0, trapecio: 0, hombro_deltoides: 0, biceps: 0, triceps: 0, antebrazo: 0, abdominales: 0, gluteos: 0, cuadriceps: 0, isquiotibiales: 0, gemelos: 0 };
+            let workoutMuscleCounts = {};
             let hasValidData = false;
 
             currentHistoryDetails.forEach(ex => {
@@ -1422,7 +1422,10 @@ window.viewWorkoutDetails = (wId, routineName, detailsStr, noteStr, timeStr = ""
                     const validSets = sets.filter(s => s.w > 0 || String(s.r).toLowerCase() === 'f' || parseInt(s.r) > 0).length;
                     if (validSets > 0) {
                         hasValidData = true;
-                        for (let m in ws) if (workoutMuscleCounts[m] !== undefined) workoutMuscleCounts[m] += ws[m] * validSets;
+                        for (let m in ws) {
+                            if (m === 'General' || m === 'Varios') continue;
+                            workoutMuscleCounts[m] = (workoutMuscleCounts[m] || 0) + (ws[m] * validSets);
+                        }
                     }
                 }
             });
