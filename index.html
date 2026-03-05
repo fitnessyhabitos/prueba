@@ -41,9 +41,6 @@
                 onclick="window.loadAdminUsers(); window.switchTab('admin-view');">
                 <span class="top-icon">🛡️</span><span class="top-label" style="color:#ffaa00;">COACH</span>
             </div>
-            <div id="top-btn-ranking" class="top-nav-item hidden" onclick="window.loadRankingView()">
-                <span class="top-icon">🏆</span><span class="top-label">RANK</span>
-            </div>
             <div id="top-btn-profile" class="top-nav-item" onclick="window.switchTab('profile-view')">
                 <span class="top-icon">⚙️</span><span class="top-label">PERFIL</span>
             </div>
@@ -166,6 +163,11 @@
                     <span style="font-size:1.8rem;">🥗</span><span
                         style="font-size:0.6rem; color:var(--success-color); font-weight:bold;">DIETA</span>
                 </div>
+                <div id="btn-sub-view" class="hidden" onclick="window.openModal('modal-subscription-user')"
+                    style="display:flex; flex-direction:column; align-items:center; cursor:pointer; margin-right:10px;">
+                    <span style="font-size:1.8rem;">💎</span><span
+                        style="font-size:0.6rem; color:var(--accent-color); font-weight:bold;">PLAN</span>
+                </div>
                 <button class="btn-outline btn-small" style="width:auto; margin:0;"
                     onclick="window.loadProfile()">↻</button>
             </div>
@@ -180,22 +182,16 @@
             </div>
 
             <div id="tab-content-progress" class="profile-tab-content">
-                <div class="card hidden" id="user-subscription-card">
-                    <h3>💎 MI SUSCRIPCIÓN</h3>
-                    <div style="margin-bottom:10px;">
-                        <span style="font-size:0.8rem; color:#aaa;">Plan Actual:</span>
-                        <div id="user-plan-name" style="font-size:1.1rem; color:var(--accent-color); font-weight:bold;">-</div>
+                <div class="card" id="user-ranking-card"
+                    style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;"
+                    onclick="window.loadRankingView()">
+                    <div style="display:flex; align-items:center;">
+                        <span style="font-size:1.8rem; margin-right:15px;">🏆</span>
+                        <div>
+                            <h3 style="margin:0; font-size:1rem;">PARTICIPACIÓN RANKING</h3>
+                            <span style="font-size:0.8rem; color:#aaa;">Haz click para ver la Comunidad</span>
+                        </div>
                     </div>
-                    <div style="margin-bottom:10px;">
-                        <span style="font-size:0.8rem; color:#aaa;">Válido hasta:</span>
-                        <div id="user-plan-expiry" style="font-size:1rem; color:white; font-weight:bold;">-</div>
-                    </div>
-                    <div style="margin-bottom:15px;">
-                        <span style="font-size:0.8rem; color:#aaa;">Sesiones Presenciales:</span>
-                        <div id="user-sessions-text" style="font-size:0.9rem; color:white;">-</div>
-                    </div>
-                    <button class="btn-small btn-outline" style="width:100%;" onclick="window.showPaymentHistory('user')">VER HISTORIAL DE PAGOS</button>
-                    <div style="font-size:0.7rem; color:#666; margin-top:10px; text-align:center;">* Si quieres renovar, contacta con tu Coach.</div>
                 </div>
                 <div class="card">
                     <h3>ESTADÍSTICAS TOTALES</h3>
@@ -408,47 +404,7 @@
             </div>
         </section>
 
-        <section id="ranking-view" class="view-container">
-            <div style="text-align:center; margin-bottom:15px;">
-                <h2 style="color:var(--accent-color); font-family:var(--font-sport); margin:0;">LEADERBOARD</h2>
-                <p style="color:#666; font-size:0.7rem;">Compite contra la comunidad</p>
-            </div>
-            <div class="rank-filter-row"><span class="filter-label">PERIODO:</span>
-                <div class="pill-selector">
-                    <div id="time-week" class="pill" onclick="window.changeRankFilter('time', 'week')">📆 SEMANA</div>
-                    <div id="time-month" class="pill" onclick="window.changeRankFilter('time', 'month')">📅 MES</div>
-                    <div id="time-year" class="pill" onclick="window.changeRankFilter('time', 'year')">📆 AÑO</div>
-                    <div id="time-all" class="pill active" onclick="window.changeRankFilter('time', 'all')">♾️ SIEMPRE
-                    </div>
-                </div>
-            </div>
-            <div class="rank-filter-row"><span class="filter-label">LIGA:</span>
-                <div class="pill-selector">
-                    <div id="gender-all" class="pill active" onclick="window.changeRankFilter('gender', 'all')">🌍 MIXTA
-                    </div>
-                    <div id="gender-male" class="pill" onclick="window.changeRankFilter('gender', 'male')">🚹 HOMBRE
-                    </div>
-                    <div id="gender-female" class="pill" onclick="window.changeRankFilter('gender', 'female')">🚺 MUJER
-                    </div>
-                </div>
-            </div>
-            <div style="margin-bottom:15px;"><span class="filter-label" style="margin-left:5px;">CATEGORÍA:</span>
-                <div class="scroll-pills">
-                    <div id="cat-kg" class="pill-cat active" onclick="window.changeRankFilter('cat', 'kg')">🏋️ VOLUMEN
-                        (Kg)</div>
-                    <div id="cat-workouts" class="pill-cat" onclick="window.changeRankFilter('cat', 'workouts')">📅
-                        ENTRENOS</div>
-                    <div id="cat-prs" class="pill-cat" onclick="window.changeRankFilter('cat', 'prs')">🏆 RÉCORDS (PRs)
-                    </div>
-                    <div id="cat-reps" class="pill-cat" onclick="window.changeRankFilter('cat', 'reps')">🔥 REPS TOTALES
-                    </div>
-                    <div id="cat-sets" class="pill-cat" onclick="window.changeRankFilter('cat', 'sets')">📊 SERIES</div>
-                </div>
-            </div>
-            <div id="ranking-list" class="ranking-list-container"></div>
-            <div class="tip-box" style="margin-top:20px;">💡 Activa "Participar en Ranking" en tu perfil para aparecer
-                aquí.</div>
-        </section>
+        <!-- DELETED SECTION RANKING -->
 
         <section id="admin-view" class="view-container">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
@@ -577,59 +533,16 @@
                         </select><button class="btn-small btn" style="width:auto; padding:0 15px;"
                             onclick="window.assignPlan()">ASIGNAR PLAN</button></div>
                 </div>
-                <div class="card" id="coach-subscription-card">
-                    <h3>💎 SUSCRIPCIÓN Y ACCESO</h3>
-                    <div
-                        style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #333; padding-bottom:10px;">
-                        <span style="font-weight:bold; color:var(--accent-color);">Acceso a la App</span>
-                        <label class="switch">
-                            <input type="checkbox" id="coach-toggle-app-active"
-                                onchange="window.toggleUserAppActive(this.checked)">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <div style="margin-bottom:15px;">
-                        <label style="font-size:0.75rem; color:#aaa; display:block; margin-bottom:5px;">Plan
-                            Contratado</label>
-                        <select id="coach-plan-type-select" style="margin-bottom:5px;" onchange="window.changeUserPlanType(this.value)">
-                            <option value="">-- Selecciona el Plan --</option>
-                            <option value="Sesión de Prueba">Sesión de Prueba (40€)</option>
-                            <option value="Plan App">Plan App (25€/mes)</option>
-                            <option value="Plan Preparación">Plan Preparación (70€/mes)</option>
-                            <option value="Plan 4 Sesiones">Plan 4 Sesiones (170€/mes)</option>
-                            <option value="Plan 8 Sesiones">Plan 8 Sesiones (290€/mes)</option>
-                        </select>
-                        <div id="coach-plan-expiry-text" style="font-size:0.85rem; color:white; margin-bottom:15px;">Caducidad: <span style="font-weight:bold; color:var(--accent-color);">-</span></div>
-                        
-                        <div style="background:#1a1a1a; padding:10px; border-radius:8px; border:1px solid #333;">
-                            <label style="font-size:0.75rem; color:var(--success-color); font-weight:bold; display:block; margin-bottom:5px;">Añadir Meses y Registrar Pago</label>
-                            <div style="display:flex; gap:5px; margin-bottom:10px;">
-                                <input type="number" id="coach-add-months" placeholder="Meses (ej. 4)" style="width:50%; margin:0;">
-                                <input type="number" id="coach-add-amount" placeholder="Precio (€)" style="width:50%; margin:0;">
-                            </div>
-                            <button class="btn-small btn" style="width:100%; border-radius:4px; font-weight:bold;" onclick="window.addSubscriptionMonths()">AÑADIR MESES Y PAGO</button>
+                <div class="card" id="coach-subscription-btn-card"
+                    style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;"
+                    onclick="window.openModal('modal-subscription-coach')">
+                    <div style="display:flex; align-items:center;">
+                        <span style="font-size:1.8rem; margin-right:15px;">💎</span>
+                        <div>
+                            <h3 style="margin:0; font-size:1rem;">ACCESO & PAGOS</h3>
+                            <span style="font-size:0.8rem; color:#aaa;">Gestionar suscripción del atleta</span>
                         </div>
                     </div>
-                    <div style="margin-bottom:15px;">
-                        <label style="font-size:0.75rem; color:#aaa; display:block; margin-bottom:5px;">Sesiones Físicas
-                            Disponibles</label>
-                        <div
-                            style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#1a1a1a; padding:10px; border-radius:8px; border:1px solid #333;">
-                            <button class="btn-outline"
-                                style="width:50px; height:50px; margin:0; font-size:1.5rem; color:#f55; border-color:#f55;"
-                                onclick="window.updatePresentialSessions(-1)">-</button>
-                            <span id="coach-presential-sessions"
-                                style="font-weight:bold; font-size:2rem; color:white;">0</span>
-                            <button class="btn-outline"
-                                style="width:50px; height:50px; margin:0; font-size:1.5rem; color:#0f8; border-color:#0f8;"
-                                onclick="window.updatePresentialSessions(1)">+</button>
-                        </div>
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:5px; font-size:0.75rem;">
-                            <span style="color:#aaa;">Sesiones consumidas:</span>
-                            <span id="coach-consumed-sessions" style="color:white; font-weight:bold;">0</span>
-                        </div>
-                    </div>
-                    <button class="btn-small btn-outline" style="width:100%; margin-top:5px; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="window.showPaymentHistory('coach')"><span>💶</span> VER HISTORIAL DE PAGOS</button>
                 </div>
 
                 <div class="card" id="coach-config-card">
@@ -742,13 +655,19 @@
         <div class="modal-content" style="text-align:left;">
             <h3 id="detail-title" style="color:var(--accent-color); text-align:center; margin-bottom:15px;">DETALLES
             </h3>
-            <div id="detail-content" style="font-size:0.85rem; max-height:40vh; overflow-y:auto; padding-right:5px;"></div>
-            <div id="history-muscle-maps" class="hidden" style="margin-top:15px; border-top:1px solid #333; padding-top:15px; text-align:center;">
-                <h4 style="color:#fff; margin-bottom:10px; font-size:0.9rem;">Impacto Muscular</h4>
-                <canvas id="historyMuscleBodyMap" style="max-width:100%; height:auto; display:none; margin:0 auto;"></canvas>
-                <div id="historyMuscleRadarWrap" style="height:220px; width:100%; position:relative; display:none; margin-top:10px;"><canvas id="historyMuscleChart"></canvas></div>
+            <div id="detail-content" style="font-size:0.85rem; max-height:40vh; overflow-y:auto; padding-right:5px;">
             </div>
-            <button class="btn-outline" style="margin-top:15px;" onclick="window.closeModal('modal-details')">CERRAR</button>
+            <div id="history-muscle-maps" class="hidden"
+                style="margin-top:15px; border-top:1px solid #333; padding-top:15px; text-align:center;">
+                <h4 style="color:#fff; margin-bottom:10px; font-size:0.9rem;">Impacto Muscular</h4>
+                <canvas id="historyMuscleBodyMap"
+                    style="max-width:100%; height:auto; display:none; margin:0 auto;"></canvas>
+                <div id="historyMuscleRadarWrap"
+                    style="height:220px; width:100%; position:relative; display:none; margin-top:10px;"><canvas
+                        id="historyMuscleChart"></canvas></div>
+            </div>
+            <button class="btn-outline" style="margin-top:15px;"
+                onclick="window.closeModal('modal-details')">CERRAR</button>
         </div>
     </div>
     <div id="modal-rpe" class="modal">
@@ -843,9 +762,11 @@
     <div id="modal-payment-history" class="modal">
         <div class="modal-content">
             <h3 style="color:var(--success-color); margin-bottom:15px;">💶 HISTORIAL DE PAGOS</h3>
-            <p id="payment-history-subtitle" style="color:#888; font-size:0.85rem; margin-top:-10px; margin-bottom:15px;"></p>
+            <p id="payment-history-subtitle"
+                style="color:#888; font-size:0.85rem; margin-top:-10px; margin-bottom:15px;"></p>
             <div id="payment-history-list" style="max-height: 400px; overflow-y: auto; text-align:left;"></div>
-            <button class="btn-outline" style="margin-top:20px;" onclick="window.closeModal('modal-payment-history')">CERRAR</button>
+            <button class="btn-outline" style="margin-top:20px;"
+                onclick="window.closeModal('modal-payment-history')">CERRAR</button>
         </div>
     </div>
 
@@ -876,6 +797,146 @@
         </button>
         <button class="btn-outline" style="border:none; color:#f55; margin-top:20px; text-decoration:underline;"
             onclick="window.logout()">CERRAR SESIÓN</button>
+    </div>
+
+    <div id="modal-ranking" class="modal">
+        <div class="modal-content" style="max-height:85vh; padding:15px; overflow-y:auto;">
+            <div style="text-align:center; margin-bottom:15px;">
+                <h2 style="color:var(--accent-color); font-family:var(--font-sport); margin:0;">LEADERBOARD</h2>
+                <p style="color:#666; font-size:0.7rem;">Compite contra la comunidad</p>
+            </div>
+            <div class="rank-filter-row" style="text-align:left;"><span class="filter-label">PERIODO:</span>
+                <div class="pill-selector">
+                    <div id="time-week" class="pill" onclick="window.changeRankFilter('time', 'week')">📆 SEMANA</div>
+                    <div id="time-month" class="pill" onclick="window.changeRankFilter('time', 'month')">📅 MES</div>
+                    <div id="time-year" class="pill" onclick="window.changeRankFilter('time', 'year')">📆 AÑO</div>
+                    <div id="time-all" class="pill active" onclick="window.changeRankFilter('time', 'all')">♾️ SIEMPRE
+                    </div>
+                </div>
+            </div>
+            <div class="rank-filter-row" style="text-align:left;"><span class="filter-label">LIGA:</span>
+                <div class="pill-selector">
+                    <div id="gender-all" class="pill active" onclick="window.changeRankFilter('gender', 'all')">🌍 MIXTA
+                    </div>
+                    <div id="gender-male" class="pill" onclick="window.changeRankFilter('gender', 'male')">🚹 HOMBRE
+                    </div>
+                    <div id="gender-female" class="pill" onclick="window.changeRankFilter('gender', 'female')">🚺 MUJER
+                    </div>
+                </div>
+            </div>
+            <div style="margin-bottom:15px; text-align:left;"><span class="filter-label"
+                    style="margin-left:5px;">CATEGORÍA:</span>
+                <div class="scroll-pills">
+                    <div id="cat-kg" class="pill-cat active" onclick="window.changeRankFilter('cat', 'kg')">🏋️ VOLUMEN
+                        (Kg)</div>
+                    <div id="cat-workouts" class="pill-cat" onclick="window.changeRankFilter('cat', 'workouts')">📅
+                        ENTRENOS</div>
+                    <div id="cat-prs" class="pill-cat" onclick="window.changeRankFilter('cat', 'prs')">🏆 RÉCORDS (PRs)
+                    </div>
+                    <div id="cat-reps" class="pill-cat" onclick="window.changeRankFilter('cat', 'reps')">🔥 REPS TOTALES
+                    </div>
+                    <div id="cat-sets" class="pill-cat" onclick="window.changeRankFilter('cat', 'sets')">📊 SERIES</div>
+                </div>
+            </div>
+            <div id="ranking-list" class="ranking-list-container" style="min-height:200px; text-align:left;"></div>
+            <div class="tip-box" style="margin-top:20px;">💡 Activa "Participar en Ranking" en tu Perfil -> Ajustes ->
+                Participar en Ranking para aparecer aquí.</div>
+            <button class="btn-outline" style="margin-top:20px;"
+                onclick="window.closeModal('modal-ranking')">CERRAR</button>
+        </div>
+    </div>
+
+    <!-- User Subscription Modal -->
+    <div id="modal-subscription-user" class="modal">
+        <div class="modal-content">
+            <h3 style="color:var(--accent-color); margin-bottom:15px;">💎 MI SUSCRIPCIÓN</h3>
+            <div style="margin-bottom:10px; text-align:left;">
+                <span style="font-size:0.8rem; color:#aaa;">Plan Actual:</span>
+                <div id="user-plan-name" style="font-size:1.1rem; color:var(--accent-color); font-weight:bold;">-</div>
+            </div>
+            <div style="margin-bottom:10px; text-align:left;">
+                <span style="font-size:0.8rem; color:#aaa;">Válido hasta:</span>
+                <div id="user-plan-expiry" style="font-size:1rem; color:white; font-weight:bold;">-</div>
+            </div>
+            <div style="margin-bottom:15px; text-align:left;">
+                <span style="font-size:0.8rem; color:#aaa;">Sesiones Presenciales:</span>
+                <div id="user-sessions-text" style="font-size:0.9rem; color:white;">-</div>
+            </div>
+            <button class="btn-small btn-outline" style="width:100%;" onclick="window.showPaymentHistory('user')">VER
+                HISTORIAL DE PAGOS</button>
+            <div style="font-size:0.7rem; color:#666; margin-top:10px; text-align:center;">* Si quieres renovar,
+                contacta con tu Coach.</div>
+            <button class="btn-outline" style="margin-top:20px;"
+                onclick="window.closeModal('modal-subscription-user')">CERRAR</button>
+        </div>
+    </div>
+
+    <!-- Coach Subscription Modal -->
+    <div id="modal-subscription-coach" class="modal">
+        <div class="modal-content" style="text-align:left;">
+            <h3 style="color:var(--accent-color); margin-bottom:15px; text-align:center;">💎 SUSCRIPCIÓN Y ACCESO</h3>
+            <div
+                style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #333; padding-bottom:10px;">
+                <span style="font-weight:bold; color:var(--accent-color);">Acceso a la App</span>
+                <label class="switch">
+                    <input type="checkbox" id="coach-toggle-app-active"
+                        onchange="window.toggleUserAppActive(this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div style="margin-bottom:15px;">
+                <label style="font-size:0.75rem; color:#aaa; display:block; margin-bottom:5px;">Plan Contratado</label>
+                <select id="coach-plan-type-select" style="margin-bottom:5px;"
+                    onchange="window.changeUserPlanType(this.value)">
+                    <option value="">-- Selecciona el Plan --</option>
+                    <option value="Sesión de Prueba">Sesión de Prueba (40€)</option>
+                    <option value="Plan App">Plan App (25€/mes)</option>
+                    <option value="Plan Preparación">Plan Preparación (70€/mes)</option>
+                    <option value="Plan 4 Sesiones">Plan 4 Sesiones (170€/mes)</option>
+                    <option value="Plan 8 Sesiones">Plan 8 Sesiones (290€/mes)</option>
+                </select>
+                <div id="coach-plan-expiry-text" style="font-size:0.85rem; color:white; margin-bottom:15px;">Caducidad:
+                    <span style="font-weight:bold; color:var(--accent-color);">-</span></div>
+
+                <div style="background:#1a1a1a; padding:10px; border-radius:8px; border:1px solid #333;">
+                    <label
+                        style="font-size:0.75rem; color:var(--success-color); font-weight:bold; display:block; margin-bottom:5px;">Añadir
+                        Meses y Registrar Pago</label>
+                    <div style="display:flex; gap:5px; margin-bottom:10px;">
+                        <input type="number" id="coach-add-months" placeholder="Meses (ej. 4)"
+                            style="width:50%; margin:0;">
+                        <input type="number" id="coach-add-amount" placeholder="Precio (€)"
+                            style="width:50%; margin:0;">
+                    </div>
+                    <button class="btn-small btn" style="width:100%; border-radius:4px; font-weight:bold;"
+                        onclick="window.addSubscriptionMonths()">AÑADIR MESES Y PAGO</button>
+                </div>
+            </div>
+            <div style="margin-bottom:15px;">
+                <label style="font-size:0.75rem; color:#aaa; display:block; margin-bottom:5px;">Sesiones Físicas
+                    Disponibles</label>
+                <div
+                    style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:#1a1a1a; padding:10px; border-radius:8px; border:1px solid #333;">
+                    <button class="btn-outline"
+                        style="width:50px; height:50px; margin:0; font-size:1.5rem; color:#f55; border-color:#f55;"
+                        onclick="window.updatePresentialSessions(-1)">-</button>
+                    <span id="coach-presential-sessions" style="font-weight:bold; font-size:2rem; color:white;">0</span>
+                    <button class="btn-outline"
+                        style="width:50px; height:50px; margin:0; font-size:1.5rem; color:#0f8; border-color:#0f8;"
+                        onclick="window.updatePresentialSessions(1)">+</button>
+                </div>
+                <div
+                    style="display:flex; justify-content:space-between; align-items:center; margin-top:5px; font-size:0.75rem;">
+                    <span style="color:#aaa;">Sesiones consumidas:</span>
+                    <span id="coach-consumed-sessions" style="color:white; font-weight:bold;">0</span>
+                </div>
+            </div>
+            <button class="btn-small btn-outline"
+                style="width:100%; margin-top:5px; display:flex; align-items:center; justify-content:center; gap:8px;"
+                onclick="window.showPaymentHistory('coach')"><span>💶</span> VER HISTORIAL DE PAGOS</button>
+            <button class="btn-outline" style="margin-top:20px; width:100%;"
+                onclick="window.closeModal('modal-subscription-coach')">CERRAR</button>
+        </div>
     </div>
 
     <div id="toast-container"></div>

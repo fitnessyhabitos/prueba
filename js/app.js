@@ -211,7 +211,7 @@ onAuthStateChanged(auth, async (user) => {
                     }
 
                     // Actualizar Badge del plan en Perfil
-                    const pCard = document.getElementById('user-subscription-card');
+                    const pCard = document.getElementById('btn-sub-view');
                     if (pCard && !isCoach) {
                         if (userData.currentPlan) {
                             pCard.classList.remove('hidden');
@@ -357,7 +357,7 @@ window.loadProfile = async () => {
     updatePhotoDisplay(userData);
 
     if (!userData.photo) { const header = document.querySelector('.profile-header'); if (!document.getElementById('photo-nudge')) { const nudge = document.createElement('div'); nudge.id = 'photo-nudge'; nudge.className = 'tip-box'; nudge.style.marginTop = '10px'; nudge.innerHTML = '📸 ¡Sube una foto para que tu Coach te reconozca mejor!'; header.parentNode.insertBefore(nudge, header.nextSibling); } } else { const nudge = document.getElementById('photo-nudge'); if (nudge) nudge.remove(); }
-    if (userData.rankingOptIn) { document.getElementById('cfg-ranking').checked = true; document.getElementById('top-btn-ranking').classList.remove('hidden'); } else { document.getElementById('cfg-ranking').checked = false; document.getElementById('top-btn-ranking').classList.add('hidden'); }
+    if (userData.rankingOptIn) { document.getElementById('cfg-ranking').checked = true; document.getElementById('user-ranking-card').style.display = 'flex'; } else { document.getElementById('cfg-ranking').checked = false; document.getElementById('user-ranking-card').style.display = 'none'; }
 
     const fixChartContainer = (id) => { const c = document.getElementById(id); if (c && c.parentElement) { c.parentElement.style.height = '250px'; c.parentElement.style.marginBottom = '35px'; } };
 
@@ -803,7 +803,7 @@ window.removeSet = (exIdx) => { if (activeWorkout.exs[exIdx].sets.length > 1) { 
 window.toggleAllSets = (exIdx) => { const ex = activeWorkout.exs[exIdx]; const allDone = ex.sets.every(s => s.d); const newState = !allDone; ex.sets.forEach(s => { s.d = newState; }); saveLocalWorkout(); renderWorkout(); if (newState) showToast("✅ Todas las series completadas"); };
 window.openNoteModal = (idx) => { noteTargetIndex = idx; const existingNote = activeWorkout.exs[idx].note || ""; document.getElementById('exercise-note-input').value = existingNote; window.openModal('modal-note'); };
 window.saveNote = () => { if (noteTargetIndex === null) return; const txt = document.getElementById('exercise-note-input').value.trim(); activeWorkout.exs[noteTargetIndex].note = txt; saveLocalWorkout(); renderWorkout(); window.closeModal('modal-note'); showToast(txt ? "📝 Nota guardada" : "🗑️ Nota borrada"); };
-window.toggleRankingOptIn = async (val) => { try { await updateDoc(doc(db, "users", currentUser.uid), { rankingOptIn: val }); userData.rankingOptIn = val; const btnRank = document.getElementById('top-btn-ranking'); if (val) btnRank.classList.remove('hidden'); else btnRank.classList.add('hidden'); showToast(val ? "🏆 Ahora participas en el Ranking" : "👻 Ranking desactivado"); } catch (e) { alert("Error actualizando perfil"); } };
+window.toggleRankingOptIn = async (val) => { try { await updateDoc(doc(db, "users", currentUser.uid), { rankingOptIn: val }); userData.rankingOptIn = val; const btnRank = document.getElementById('user-ranking-card'); if (val) btnRank.style.display = 'flex'; else btnRank.style.display = 'none'; showToast(val ? "🏆 Ahora participas en el Ranking" : "👻 Ranking desactivado"); } catch (e) { alert("Error actualizando perfil"); } };
 
 window.setMuscleView = async (val) => {
     userData.muscleView = val;
@@ -839,7 +839,7 @@ window.changeRankFilter = (type, val) => {
 };
 
 window.loadRankingView = async () => {
-    switchTab('ranking-view'); const list = document.getElementById('ranking-list'); list.innerHTML = '<div style="text-align:center; margin-top:50px; color:#666;">⏳ Verificando datos...</div>';
+    window.openModal('modal-ranking'); const list = document.getElementById('ranking-list'); list.innerHTML = '<div style="text-align:center; margin-top:50px; color:#666;">⏳ Verificando datos...</div>';
     try {
         const cacheKey = `rank_cache_${rankFilterTime}_${rankFilterGender}_${rankFilterCat}`; const todayStr = new Date().toDateString(); const cachedRaw = localStorage.getItem(cacheKey); let useCache = false; let rankingData = [];
         if (cachedRaw) { const cachedObj = JSON.parse(cachedRaw); if (cachedObj.date === todayStr) { rankingData = cachedObj.data; useCache = true; } }
