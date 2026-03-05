@@ -214,12 +214,16 @@ onAuthStateChanged(auth, async (user) => {
                     const pCard = document.getElementById('user-subscription-card');
                     if (pCard && !isCoach) {
                         if (userData.currentPlan) {
-                            pCard.style.display = 'block';
+                            pCard.classList.remove('hidden');
                             document.getElementById('user-plan-name').innerText = userData.currentPlan;
+                            let expText = '-';
+                            if (userData.subscriptionExpiry) expText = new Date(userData.subscriptionExpiry).toLocaleDateString('es-ES');
+                            document.getElementById('user-plan-expiry').innerText = expText;
                             const sessions = userData.presentialSessions || 0;
-                            document.getElementById('user-sessions-text').innerText = sessions > 0 ? `${sessions} Sesiones Presenciales disponibles` : 'Sin sesiones físicas pendientes';
+                            const consumed = userData.consumedSessions || 0;
+                            document.getElementById('user-sessions-text').innerText = `Disponibles: ${sessions} | Consumidas: ${consumed}`;
                         } else {
-                            pCard.style.display = 'none';
+                            pCard.classList.add('hidden');
                         }
                     }
 
@@ -1390,7 +1394,69 @@ window.deletePlan = async (id) => { if (confirm("¿Borrar plan?")) { await delet
 window.openAssignPlanModal = async (planId) => { assignMode = 'plan'; selectedPlanForMassAssign = planId; const list = document.getElementById('assign-users-list'); window.openModal('modal-assign-plan'); try { const snap = await getDoc(doc(db, "plans", planId)); if (snap.exists()) document.getElementById('assign-plan-title').innerText = `Asignar "${snap.data().name}" a:`; let q = userData.role === 'assistant' ? query(collection(db, "users"), where("assignedCoach", "==", currentUser.uid)) : collection(db, "users"); const uSnap = await getDocs(q); list.innerHTML = ''; uSnap.forEach(d => { const u = d.data(); if (u.role === 'athlete') { const div = document.createElement('div'); div.className = "selector-item user-select-card"; div.onclick = (e) => { if (e.target.type !== 'checkbox') { const cb = div.querySelector('input'); cb.checked = !cb.checked; } if (div.querySelector('input').checked) { div.style.backgroundColor = 'rgba(255, 51, 51, 0.2)'; div.style.border = '1px solid var(--accent-color)'; div.classList.add('active-selection'); } else { div.style.backgroundColor = 'transparent'; div.style.border = '1px solid #333'; div.classList.remove('active-selection'); } }; div.innerHTML = `<input type="checkbox" class="user-mass-check selector-checkbox" value="${d.id}" id="u-${d.id}" style="pointer-events:none;"><label class="selector-label" style="pointer-events:none;">${u.name}</label>`; list.appendChild(div); } }); } catch (e) { console.error(e); } };
 window.distributePlan = async () => { const checks = document.querySelectorAll('.user-mass-check:checked'); if (checks.length === 0) return alert("Selecciona al menos un cliente."); const userIds = Array.from(checks).map(c => c.value); const btn = document.querySelector('#modal-assign-plan .btn'); const originalText = btn.innerText; btn.innerText = "ENVIANDO..."; btn.disabled = true; try { if (assignMode === 'plan' && selectedPlanForMassAssign) { const planSnap = await getDoc(doc(db, "plans", selectedPlanForMassAssign)); const planData = planSnap.data(); const routinesList = planData.routines; const promisesRoutine = routinesList.map(rid => updateDoc(doc(db, "routines", rid), { assignedTo: arrayUnion(...userIds) })); await Promise.all(promisesRoutine); const promisesUsers = userIds.map(uid => updateDoc(doc(db, "users", uid), { routineOrder: routinesList })); await Promise.all(promisesUsers); alert(`✅ Plan asignado y ordenado correctamente.`); } else if (assignMode === 'routine' && selectedRoutineForMassAssign) { await updateDoc(doc(db, "routines", selectedRoutineForMassAssign), { assignedTo: arrayUnion(...userIds) }); const promisesOrder = userIds.map(uid => updateDoc(doc(db, "users", uid), { routineOrder: arrayUnion(selectedRoutineForMassAssign) })); await Promise.all(promisesOrder); alert(`✅ Rutina enviada correctamente.`); } window.closeModal('modal-assign-plan'); } catch (e) { alert("Error: " + e.message); } finally { btn.innerText = originalText; btn.disabled = false; } };
 
-window.viewWorkoutDetails = (wId, routineName, detailsStr, noteStr, timeStr = "") => { try { editingHistoryId = wId; currentHistoryDetails = JSON.parse(decodeURIComponent(detailsStr)); const note = decodeURIComponent(noteStr || ""); let timeHtml = timeStr ? `<div style="text-align:center; color:#666; font-size:0.75rem; margin-bottom:10px;">Finalizado: ${timeStr}</div>` : ""; let html = `<br>${timeHtml}<br><div class="detail-note-box">📝 ${note || "Sin notas."}</div><br><div id="history-details-container"><br>${renderHistoryHTML(currentHistoryDetails)}<br></div><br><div style="margin-top:20px; text-align:center;"><br><button id="btn-edit-history" class="btn-outline" style="width:auto; border-color:var(--accent-color); color:var(--accent-color);" onclick="window.enableHistoryEdit()">✏️ EDITAR DATOS</button><br><button id="btn-save-history" class="btn hidden" style="width:auto; margin-top:10px;" onclick="window.saveHistoryChanges()">💾 GUARDAR CAMBIOS</button><br></div><br>`; document.getElementById('detail-title').innerText = routineName; document.getElementById('detail-content').innerHTML = html; window.openModal('modal-details'); } catch (e) { console.error(e); alert("Error cargando detalles."); } };
+window.viewWorkoutDetails = (wId, routineName, detailsStr, noteStr, timeStr = "") => {
+    try {
+        editingHistoryId = wId;
+        currentHistoryDetails = JSON.parse(decodeURIComponent(detailsStr));
+        const note = decodeURIComponent(noteStr || "");
+        let timeHtml = timeStr ? `<div style="text-align:center; color:#666; font-size:0.75rem; margin-bottom:10px;">Finalizado: ${timeStr}</div>` : "";
+        let html = `<br>${timeHtml}<br><div class="detail-note-box">📝 ${note || "Sin notas."}</div><br><div id="history-details-container"><br>${renderHistoryHTML(currentHistoryDetails)}<br></div><br><div style="margin-top:20px; text-align:center;"><br><button id="btn-edit-history" class="btn-outline" style="width:auto; border-color:var(--accent-color); color:var(--accent-color);" onclick="window.enableHistoryEdit()">✏️ EDITAR DATOS</button><br><button id="btn-save-history" class="btn hidden" style="width:auto; margin-top:10px;" onclick="window.saveHistoryChanges()">💾 GUARDAR CAMBIOS</button><br></div><br>`;
+        document.getElementById('detail-title').innerText = routineName;
+        document.getElementById('detail-content').innerHTML = html;
+        window.openModal('modal-details');
+
+        // MAPS LOGIC
+        const mapsContainer = document.getElementById('history-muscle-maps');
+        const mapCanvas = document.getElementById('historyMuscleBodyMap');
+        const radarWrap = document.getElementById('historyMuscleRadarWrap');
+
+        if (mapsContainer && currentHistoryDetails && currentHistoryDetails.length > 0) {
+            let workoutMuscleCounts = { pecho: 0, espalda_dorsal: 0, trapecio: 0, hombro_deltoides: 0, biceps: 0, triceps: 0, antebrazo: 0, abdominales: 0, gluteos: 0, cuadriceps: 0, isquiotibiales: 0, gemelos: 0 };
+            let hasValidData = false;
+
+            currentHistoryDetails.forEach(ex => {
+                let name = ex.n || ex;
+                let sets = ex.s || [];
+                if (typeof calcBiomechanicalWeights === 'function') {
+                    const ws = calcBiomechanicalWeights(name);
+                    const validSets = sets.filter(s => s.w > 0 || String(s.r).toLowerCase() === 'f' || parseInt(s.r) > 0).length;
+                    if (validSets > 0) {
+                        hasValidData = true;
+                        for (let m in ws) if (workoutMuscleCounts[m] !== undefined) workoutMuscleCounts[m] += ws[m] * validSets;
+                    }
+                }
+            });
+
+            const maxMuscle = Math.max(1, ...Object.values(workoutMuscleCounts));
+            if (hasValidData && maxMuscle > 0) {
+                mapsContainer.classList.remove('hidden');
+                mapsContainer.style.display = 'block';
+
+                const intensities = Object.fromEntries(Object.entries(workoutMuscleCounts).filter(([, v]) => v > 0).map(([k, v]) => [k, v / maxMuscle]));
+                const coachViewEl = document.getElementById('coach-detail-view');
+                const isCoachView = coachViewEl && !coachViewEl.classList.contains('hidden');
+
+                let uView = 'both';
+                if (!isCoachView && window.userData && window.userData.muscleView) uView = window.userData.muscleView;
+
+                const showMap = uView === 'map' || uView === 'both';
+                const showRadar = uView === 'radar' || uView === 'both';
+
+                mapCanvas.style.display = showMap ? 'block' : 'none';
+                radarWrap.style.display = showRadar ? 'block' : 'none';
+
+                if (showMap) renderMuscleMap('historyMuscleBodyMap', intensities);
+                if (showRadar) renderMuscleRadar('historyMuscleChart', workoutMuscleCounts);
+            } else {
+                mapsContainer.style.display = 'none';
+                mapsContainer.classList.add('hidden');
+            }
+        } else if (mapsContainer) {
+            mapsContainer.style.display = 'none';
+            mapsContainer.classList.add('hidden');
+        }
+    } catch (e) { console.error(e); alert("Error cargando detalles."); }
+};
 function renderHistoryHTML(details) { let html = ''; details.forEach((ex, exIdx) => { const name = ex.n || ex; const sets = ex.s || []; const exNoteHtml = ex.note ? `<div style="font-size:0.75rem; color:#aaa; font-style:italic; margin-top:5px; padding:4px; border-left:2px solid #555; background:#111;">📝 ${ex.note}</div>` : ''; html += `<div class="detail-exercise-card"><div class="detail-exercise-title">${name}</div>${exNoteHtml}<div class="detail-sets-grid" id="hist-grid-${exIdx}">`; if (sets.length > 0) { sets.forEach((s, i) => { const num = s.numDisplay || (i + 1); const w = s.w || 0; const r = s.r || 0; const dropStyle = s.isDrop ? 'border: 1px solid var(--warning-color); background: rgba(255, 170, 0, 0.15);' : ''; html += `<div class="detail-set-badge history-set-item" style="${dropStyle}" data-ex="${exIdx}" data-set="${i}"><br><span class="detail-set-num">#${num}</span><br><span class="set-view"><b>${r}</b> <span style="color:#666">x</span> ${w}k</span><br></div>`; }); } else { html += `<div style="font-size:0.7rem; color:#666;">Sin datos.</div>`; } html += `</div></div>`; }); return html; }
 
 window.enableHistoryEdit = () => {
@@ -1558,7 +1624,11 @@ window.openCoachView = async (uid, u) => {
     // --- SUBSCRIPTION CARD UPDATE ---
     document.getElementById('coach-toggle-app-active').checked = freshU.appActive !== false;
     document.getElementById('coach-plan-type-select').value = freshU.currentPlan || "";
+    let cExpText = '-';
+    if (freshU.subscriptionExpiry) cExpText = new Date(freshU.subscriptionExpiry).toLocaleDateString('es-ES');
+    document.getElementById('coach-plan-expiry-text').innerHTML = `Caducidad: <span style="font-weight:bold; color:var(--accent-color);">${cExpText}</span>`;
     document.getElementById('coach-presential-sessions').innerText = freshU.presentialSessions || 0;
+    document.getElementById('coach-consumed-sessions').innerText = freshU.consumedSessions || 0;
     // --------------------------------
 
     const existingTg = document.getElementById('coach-telegram-row');
@@ -1653,4 +1723,96 @@ window.contactCoachWa = () => {
 window.notifyPaymentReady = () => {
     const msg = encodeURIComponent("Hola Toni, ya he realizado el Bizum con mi nombre completo para activar mi cuenta en Fit Data Pro. Quedo a la espera. 🙌");
     window.open(`https://wa.me/34614056363?text=${msg}`, '_blank');
+};
+
+window.addSubscriptionMonths = async () => {
+    if (!selectedUserCoach || !selectedUserObj) return alert('No hay usuario seleccionado.');
+    const inputMonths = document.getElementById('coach-add-months').value;
+    const inputAmount = document.getElementById('coach-add-amount').value;
+    const numMonths = parseInt(inputMonths);
+    const amountPaid = parseFloat(inputAmount);
+
+    if (!numMonths || isNaN(numMonths) || numMonths <= 0) return alert('Introduce un número de meses válido.');
+    if (isNaN(amountPaid) || amountPaid < 0) return alert('Introduce un precio válido.');
+
+    if (!confirm(`¿Añadir ${numMonths} meses por ${amountPaid}€ al atleta?`)) return;
+
+    try {
+        let currentExpiry = selectedUserObj.subscriptionExpiry;
+        let newDate = new Date();
+
+        // Si ya tiene caducidad en el futuro, sumamos a esa fecha. Si ha caducado, sumamos desde hoy.
+        if (currentExpiry) {
+            const expDate = new Date(currentExpiry);
+            if (expDate > newDate) newDate = expDate;
+        }
+
+        newDate.setMonth(newDate.getMonth() + numMonths);
+        const newExpiryStr = newDate.toISOString();
+
+        // Crear registro de pago
+        const paymentRecord = {
+            date: new Date().toISOString(),
+            months: numMonths,
+            amount: amountPaid
+        };
+
+        const newPaymentHistory = [...(selectedUserObj.paymentHistory || []), paymentRecord];
+
+        await updateDoc(doc(db, "users", selectedUserCoach), {
+            subscriptionExpiry: newExpiryStr,
+            paymentHistory: newPaymentHistory
+        });
+
+        // Actualizar UI Coach local
+        selectedUserObj.subscriptionExpiry = newExpiryStr;
+        selectedUserObj.paymentHistory = newPaymentHistory;
+
+        const cExpText = new Date(newExpiryStr).toLocaleDateString('es-ES');
+        document.getElementById('coach-plan-expiry-text').innerHTML = `Caducidad: <span style="font-weight:bold; color:var(--accent-color);">${cExpText}</span>`;
+
+        document.getElementById('coach-add-months').value = '';
+        document.getElementById('coach-add-amount').value = '';
+
+        showToast('✅ Meses añadidos y pago registrado');
+    } catch (e) {
+        alert("Error al añadir suscripción: " + e.message);
+    }
+};
+
+window.showPaymentHistory = (mode) => {
+    let history = [];
+    if (mode === 'user') {
+        history = userData.paymentHistory || [];
+        document.getElementById('payment-history-subtitle').innerText = "Aquí tienes tus pagos guardados.";
+    } else {
+        if (!selectedUserObj) return;
+        history = selectedUserObj.paymentHistory || [];
+        document.getElementById('payment-history-subtitle').innerText = `Pagos de ${selectedUserObj.name}`;
+    }
+
+    const listDiv = document.getElementById('payment-history-list');
+    listDiv.innerHTML = '';
+
+    if (history.length === 0) {
+        listDiv.innerHTML = '<div style="color:#aaa; text-align:center; margin-top:20px;">No hay historial de pagos registrado.</div>';
+    } else {
+        // Ordenar por fecha desc
+        const sorted = [...history].sort((a, b) => new Date(b.date) - new Date(a.date));
+        sorted.forEach(p => {
+            const dateStr = new Date(p.date).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            listDiv.innerHTML += `
+            <div style="background:#1a1a1a; border:1px solid #333; padding:10px; border-radius:8px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <div style="font-weight:bold; color:white; font-size:1.1rem;">+${p.months} Mes${p.months > 1 ? 'es' : ''}</div>
+                    <div style="color:#aaa; font-size:0.8rem; margin-top:3px;">${dateStr}</div>
+                </div>
+                <div style="color:var(--success-color); font-weight:bold; font-size:1.2rem;">
+                    ${parseFloat(p.amount).toFixed(2)}€
+                </div>
+            </div>`;
+        });
+    }
+
+    window.openModal('modal-payment-history');
 };

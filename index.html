@@ -180,6 +180,23 @@
             </div>
 
             <div id="tab-content-progress" class="profile-tab-content">
+                <div class="card hidden" id="user-subscription-card">
+                    <h3>💎 MI SUSCRIPCIÓN</h3>
+                    <div style="margin-bottom:10px;">
+                        <span style="font-size:0.8rem; color:#aaa;">Plan Actual:</span>
+                        <div id="user-plan-name" style="font-size:1.1rem; color:var(--accent-color); font-weight:bold;">-</div>
+                    </div>
+                    <div style="margin-bottom:10px;">
+                        <span style="font-size:0.8rem; color:#aaa;">Válido hasta:</span>
+                        <div id="user-plan-expiry" style="font-size:1rem; color:white; font-weight:bold;">-</div>
+                    </div>
+                    <div style="margin-bottom:15px;">
+                        <span style="font-size:0.8rem; color:#aaa;">Sesiones Presenciales:</span>
+                        <div id="user-sessions-text" style="font-size:0.9rem; color:white;">-</div>
+                    </div>
+                    <button class="btn-small btn-outline" style="width:100%;" onclick="window.showPaymentHistory('user')">VER HISTORIAL DE PAGOS</button>
+                    <div style="font-size:0.7rem; color:#666; margin-top:10px; text-align:center;">* Si quieres renovar, contacta con tu Coach.</div>
+                </div>
                 <div class="card">
                     <h3>ESTADÍSTICAS TOTALES</h3>
                     <div class="stats-grid">
@@ -574,7 +591,7 @@
                     <div style="margin-bottom:15px;">
                         <label style="font-size:0.75rem; color:#aaa; display:block; margin-bottom:5px;">Plan
                             Contratado</label>
-                        <select id="coach-plan-type-select" onchange="window.changeUserPlanType(this.value)">
+                        <select id="coach-plan-type-select" style="margin-bottom:5px;" onchange="window.changeUserPlanType(this.value)">
                             <option value="">-- Selecciona el Plan --</option>
                             <option value="Sesión de Prueba">Sesión de Prueba (40€)</option>
                             <option value="Plan App">Plan App (25€/mes)</option>
@@ -582,8 +599,18 @@
                             <option value="Plan 4 Sesiones">Plan 4 Sesiones (170€/mes)</option>
                             <option value="Plan 8 Sesiones">Plan 8 Sesiones (290€/mes)</option>
                         </select>
+                        <div id="coach-plan-expiry-text" style="font-size:0.85rem; color:white; margin-bottom:15px;">Caducidad: <span style="font-weight:bold; color:var(--accent-color);">-</span></div>
+                        
+                        <div style="background:#1a1a1a; padding:10px; border-radius:8px; border:1px solid #333;">
+                            <label style="font-size:0.75rem; color:var(--success-color); font-weight:bold; display:block; margin-bottom:5px;">Añadir Meses y Registrar Pago</label>
+                            <div style="display:flex; gap:5px; margin-bottom:10px;">
+                                <input type="number" id="coach-add-months" placeholder="Meses (ej. 4)" style="width:50%; margin:0;">
+                                <input type="number" id="coach-add-amount" placeholder="Precio (€)" style="width:50%; margin:0;">
+                            </div>
+                            <button class="btn-small btn" style="width:100%; border-radius:4px; font-weight:bold;" onclick="window.addSubscriptionMonths()">AÑADIR MESES Y PAGO</button>
+                        </div>
                     </div>
-                    <div>
+                    <div style="margin-bottom:15px;">
                         <label style="font-size:0.75rem; color:#aaa; display:block; margin-bottom:5px;">Sesiones Físicas
                             Disponibles</label>
                         <div
@@ -597,7 +624,12 @@
                                 style="width:50px; height:50px; margin:0; font-size:1.5rem; color:#0f8; border-color:#0f8;"
                                 onclick="window.updatePresentialSessions(1)">+</button>
                         </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:5px; font-size:0.75rem;">
+                            <span style="color:#aaa;">Sesiones consumidas:</span>
+                            <span id="coach-consumed-sessions" style="color:white; font-weight:bold;">0</span>
+                        </div>
                     </div>
+                    <button class="btn-small btn-outline" style="width:100%; margin-top:5px; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="window.showPaymentHistory('coach')"><span>💶</span> VER HISTORIAL DE PAGOS</button>
                 </div>
 
                 <div class="card" id="coach-config-card">
@@ -710,9 +742,13 @@
         <div class="modal-content" style="text-align:left;">
             <h3 id="detail-title" style="color:var(--accent-color); text-align:center; margin-bottom:15px;">DETALLES
             </h3>
-            <div id="detail-content" style="font-size:0.85rem; max-height:60vh; overflow-y:auto;"></div><button
-                class="btn-outline" style="margin-top:15px;"
-                onclick="window.closeModal('modal-details')">CERRAR</button>
+            <div id="detail-content" style="font-size:0.85rem; max-height:40vh; overflow-y:auto; padding-right:5px;"></div>
+            <div id="history-muscle-maps" class="hidden" style="margin-top:15px; border-top:1px solid #333; padding-top:15px; text-align:center;">
+                <h4 style="color:#fff; margin-bottom:10px; font-size:0.9rem;">Impacto Muscular</h4>
+                <canvas id="historyMuscleBodyMap" style="max-width:100%; height:auto; display:none; margin:0 auto;"></canvas>
+                <div id="historyMuscleRadarWrap" style="height:220px; width:100%; position:relative; display:none; margin-top:10px;"><canvas id="historyMuscleChart"></canvas></div>
+            </div>
+            <button class="btn-outline" style="margin-top:15px;" onclick="window.closeModal('modal-details')">CERRAR</button>
         </div>
     </div>
     <div id="modal-rpe" class="modal">
@@ -801,6 +837,15 @@
             <img id="full-image-src" style="max-width:100%; max-height:100%; object-fit:contain;"><button
                 class="btn-float" style="background:rgba(255,255,255,0.2); color:white; bottom:40px;"
                 onclick="window.closeModal('modal-image-viewer')">✕</button>
+        </div>
+    </div>
+
+    <div id="modal-payment-history" class="modal">
+        <div class="modal-content">
+            <h3 style="color:var(--success-color); margin-bottom:15px;">💶 HISTORIAL DE PAGOS</h3>
+            <p id="payment-history-subtitle" style="color:#888; font-size:0.85rem; margin-top:-10px; margin-bottom:15px;"></p>
+            <div id="payment-history-list" style="max-height: 400px; overflow-y: auto; text-align:left;"></div>
+            <button class="btn-outline" style="margin-top:20px;" onclick="window.closeModal('modal-payment-history')">CERRAR</button>
         </div>
     </div>
 
