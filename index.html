@@ -518,6 +518,17 @@
             </div>
 
             <div id="ctab-content-profile" class="coach-tab-content hidden">
+                <div class="card" id="coach-subscription-btn-card"
+                    style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;"
+                    onclick="window.openModal('modal-subscription-coach')">
+                    <div style="display:flex; align-items:center;">
+                        <span style="font-size:1.8rem; margin-right:15px;">💎</span>
+                        <div>
+                            <h3 style="margin:0; font-size:1rem;">ACCESO & PAGOS</h3>
+                            <span style="font-size:0.8rem; color:#aaa;">Gestionar suscripción del atleta</span>
+                        </div>
+                    </div>
+                </div>
                 <div class="card">
                     <h3>RUTINAS ASIGNADAS</h3>
                     <div id="coach-assigned-list" style="font-size:0.8rem; color:#888; margin-bottom:15px;">Cargando...
@@ -533,17 +544,6 @@
                             <option>Cargando planes...</option>
                         </select><button class="btn-small btn" style="width:auto; padding:0 15px;"
                             onclick="window.assignPlan()">ASIGNAR PLAN</button></div>
-                </div>
-                <div class="card" id="coach-subscription-btn-card"
-                    style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;"
-                    onclick="window.openModal('modal-subscription-coach')">
-                    <div style="display:flex; align-items:center;">
-                        <span style="font-size:1.8rem; margin-right:15px;">💎</span>
-                        <div>
-                            <h3 style="margin:0; font-size:1rem;">ACCESO & PAGOS</h3>
-                            <span style="font-size:0.8rem; color:#aaa;">Gestionar suscripción del atleta</span>
-                        </div>
-                    </div>
                 </div>
 
                 <div class="card" id="coach-config-card">
@@ -656,7 +656,7 @@
         <div class="modal-content" style="text-align:left;">
             <h3 id="detail-title" style="color:var(--accent-color); text-align:center; margin-bottom:15px;">DETALLES
             </h3>
-            <div id="detail-content" style="font-size:0.85rem; max-height:40vh; overflow-y:auto; padding-right:5px;">
+            <div id="detail-content" style="font-size:0.85rem;">
             </div>
             <div id="history-muscle-maps" class="hidden"
                 style="margin-top:15px; border-top:1px solid #333; padding-top:15px; text-align:center;">
