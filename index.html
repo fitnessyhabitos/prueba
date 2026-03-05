@@ -154,8 +154,9 @@
                 </div>
                 <input type="file" id="file-avatar" accept="image/*" class="hidden"
                     onchange="window.uploadAvatar(this)">
-                <div style="flex:1; margin-left:10px;">
-                    <h3 id="profile-name" style="margin:0;">Cargando...</h3>
+                <div style="flex:1; margin-left:10px; min-width:0;">
+                    <h3 id="profile-name"
+                        style="margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Cargando...</h3>
                     <span style="color:#666; font-size:0.8rem;">Atleta</span>
                 </div>
                 <div id="btn-diet-view" class="hidden" onclick="window.openDietView()"
@@ -896,7 +897,8 @@
                     <option value="Plan 8 Sesiones">Plan 8 Sesiones (290€/mes)</option>
                 </select>
                 <div id="coach-plan-expiry-text" style="font-size:0.85rem; color:white; margin-bottom:15px;">Caducidad:
-                    <span style="font-weight:bold; color:var(--accent-color);">-</span></div>
+                    <span style="font-weight:bold; color:var(--accent-color);">-</span>
+                </div>
 
                 <div style="background:#1a1a1a; padding:10px; border-radius:8px; border:1px solid #333;">
                     <label
