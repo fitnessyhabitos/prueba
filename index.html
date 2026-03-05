@@ -760,16 +760,7 @@
         </div>
     </div>
 
-    <div id="modal-payment-history" class="modal" style="z-index: 4000;">
-        <div class="modal-content">
-            <h3 style="color:var(--success-color); margin-bottom:15px;">💶 HISTORIAL DE PAGOS</h3>
-            <p id="payment-history-subtitle"
-                style="color:#888; font-size:0.85rem; margin-top:-10px; margin-bottom:15px;"></p>
-            <div id="payment-history-list" style="max-height: 400px; overflow-y: auto; text-align:left;"></div>
-            <button class="btn-outline" style="margin-top:20px;"
-                onclick="window.closeModal('modal-payment-history')">CERRAR</button>
-        </div>
-    </div>
+
 
     <!-- PAYWALL / BLOQUEO -->
     <div id="paywall-screen"
@@ -938,6 +929,17 @@
                 onclick="window.showPaymentHistory('coach')"><span>💶</span> VER HISTORIAL DE PAGOS</button>
             <button class="btn-outline" style="margin-top:20px; width:100%;"
                 onclick="window.closeModal('modal-subscription-coach')">CERRAR</button>
+        </div>
+    </div>
+
+    <div id="modal-payment-history" class="modal" style="z-index: 9000 !important;">
+        <div class="modal-content">
+            <h3 style="color:var(--success-color); margin-bottom:15px;">💶 HISTORIAL DE PAGOS</h3>
+            <p id="payment-history-subtitle"
+                style="color:#888; font-size:0.85rem; margin-top:-10px; margin-bottom:15px;"></p>
+            <div id="payment-history-list" style="max-height: 400px; overflow-y: auto; text-align:left;"></div>
+            <button class="btn-outline" style="margin-top:20px;"
+                onclick="window.closeModal('modal-payment-history')">CERRAR</button>
         </div>
     </div>
 

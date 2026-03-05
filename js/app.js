@@ -1418,7 +1418,7 @@ window.viewWorkoutDetails = (wId, routineName, detailsStr, noteStr, timeStr = ""
                 let name = ex.n || ex;
                 let sets = ex.s || [];
                 if (typeof calcBiomechanicalWeights === 'function') {
-                    const ws = calcBiomechanicalWeights(name);
+                    const ws = calcBiomechanicalWeights({ n: name, mInfo: ex.mInfo || null });
                     const validSets = sets.filter(s => s.w > 0 || String(s.r).toLowerCase() === 'f' || parseInt(s.r) > 0).length;
                     if (validSets > 0) {
                         hasValidData = true;
