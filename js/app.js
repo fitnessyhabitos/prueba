@@ -207,7 +207,7 @@ onAuthStateChanged(auth, async (user) => {
                         switchTab('workout-view');
                         showToast("⚡ Sesión restaurada");
                     } else {
-                        switchTab('routines-view');
+                        switchTab('home-view');
                     }
 
                     // Actualizar Badge del plan en Perfil
@@ -284,10 +284,15 @@ window.switchTab = (t) => {
     const target = document.getElementById(t);
     if (target) { target.classList.add('active'); window.scrollTo(0, 0); }
 
-    document.querySelectorAll('.top-nav-item').forEach(n => n.classList.remove('active'));
-    if (t === 'routines-view') document.getElementById('top-btn-routines').classList.add('active');
-    if (t === 'ranking-view') document.getElementById('top-btn-ranking').classList.add('active');
-    if (t === 'profile-view') { document.getElementById('top-btn-profile').classList.add('active'); window.loadProfile(); }
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    if (t === 'home-view' && document.getElementById('nav-btn-home')) {
+        document.getElementById('nav-btn-home').classList.add('active');
+        if (userData) document.getElementById('home-username').innerText = userData.name.split(' ')[0].toUpperCase();
+        if (userData && userData.currentPlan) document.getElementById('home-card-sub').style.display = 'flex';
+        else document.getElementById('home-card-sub').style.display = 'none';
+    }
+    if (t === 'routines-view' && document.getElementById('nav-btn-routines')) document.getElementById('nav-btn-routines').classList.add('active');
+    if (t === 'profile-view' && document.getElementById('nav-btn-profile')) { document.getElementById('nav-btn-profile').classList.add('active'); window.loadProfile(); }
     if (t === 'admin-view' || t === 'coach-detail-view') { document.getElementById('top-btn-coach').classList.add('active'); }
 };
 
@@ -600,7 +605,7 @@ function renderMeasureChart(canvasId, historyData) {
 
 function renderMuscleRadar(canvasId, stats) {
     const ctx = document.getElementById(canvasId); if (!ctx) return; const existingChart = Chart.getChart(ctx); if (existingChart) existingChart.destroy();
-    const muscleGroups = ["Pecho", "Espalda", "Cuádriceps", "Isquios", "Hombros", "Bíceps", "Tríceps", "Glúteos"]; const dataValues = muscleGroups.map(m => stats[m] || 0); const maxValue = Math.max(...dataValues); let calculatedStep = Math.ceil(maxValue / 5); if (calculatedStep < 1) calculatedStep = 1; const niceMax = Math.ceil(maxValue / calculatedStep) * calculatedStep;
+    const muscleGroups = ["Pecho", "Espalda", "Dorsales", "Espalda Alta", "Espalda Baja", "Cuádriceps", "Isquios", "Gemelos", "Hombros", "Hombro Frontal", "Hombro Posterior", "Bíceps", "Tríceps", "Antebrazo", "Glúteos", "Abs", "Aductores", "Abductores"]; const dataValues = muscleGroups.map(m => stats[m] || 0); const maxValue = Math.max(...dataValues); let calculatedStep = Math.ceil(maxValue / 5); if (calculatedStep < 1) calculatedStep = 1; const niceMax = Math.ceil(maxValue / calculatedStep) * calculatedStep;
     new Chart(ctx, { type: 'radar', data: { labels: muscleGroups, datasets: [{ label: 'Series', data: dataValues, backgroundColor: 'rgba(255, 51, 51, 0.25)', borderColor: '#ff3333', borderWidth: 2, pointBackgroundColor: '#ff3333', pointBorderColor: '#fff', pointRadius: 3, pointHoverRadius: 5 }] }, options: { scales: { r: { angleLines: { color: 'rgba(255, 255, 255, 0.1)' }, grid: { color: 'rgba(255, 255, 255, 0.1)', circular: false }, pointLabels: { color: '#cccccc', font: { size: 10 } }, ticks: { display: false, stepSize: calculatedStep, maxTicksLimit: 6 }, suggestedMin: 0, max: niceMax > 0 ? niceMax : 5 } }, plugins: { legend: { display: false } }, maintainAspectRatio: false } });
 }
 
@@ -608,14 +613,21 @@ function renderMuscleRadar(canvasId, stats) {
 const MUSCLE_TO_FILE = {
     'Pecho': ['pecho.png'],
     'Espalda': ['espalda.png'],
+    'Dorsales': ['dorsales.png'],
+    'Espalda Alta': ['espalda_alta.png'],
+    'Espalda Baja': ['espalda_baja.png'],
     'Cuádriceps': ['cuadriceps.png'],
     'Isquios': ['isquios.png'],
     'Glúteos': ['gluteos.png'],
     'Hombros': ['hombros.png'],
+    'Hombro Frontal': ['hombros_frontal.png'],
+    'Hombro Posterior': ['hombros_posterior.png'],
     'Bíceps': ['biceps.png'],
     'Tríceps': ['triceps.png'],
     'Gemelos': ['gemelos.png'],
     'Abs': ['abs.png'],
+    'Aductores': ['aductores.png'],
+    'Abductores': ['abductores.png'],
     'Pierna': ['cuadriceps.png', 'isquios.png', 'gluteos.png', 'gemelos.png'],
     'Brazos': ['biceps.png', 'triceps.png'],
 };
@@ -920,12 +932,30 @@ const BIOMECH_ISOLATED = 0.92;   // músculo principal en aislado
 
 // Función compartida para calcular los pesos biomecánicos de un ejercicio
 function calcBiomechanicalWeights(ex) {
+    const fallbackData = getExerciseData(ex.n);
     const exData = EXERCISES.find(e => e.n === ex.n) ||
         EXERCISES.find(e => normalizeText(e.n) === normalizeText(ex.n));
 
-    const isIsolated = (ex.type === 'i') || (exData && exData.t === 'i');
-    const mainMuscle = ex.mInfo?.main || 'General';
-    const secMuscles = exData?.sec && exData.sec.length ? exData.sec : (ex.mInfo?.sec || []);
+    const isIsolated = (ex.type === 'i') || (exData && exData.t === 'i') || fallbackData.type === 'i';
+    const MAP = {
+        "cuadriceps": "Cuádriceps", "isquios": "Isquios", "gluteos": "Glúteos", "abductores": "Abductores", "aductores": "Aductores", "gemelos": "Gemelos",
+        "dorsales": "Dorsales", "espalda_alta": "Espalda Alta", "espalda_baja": "Espalda Baja",
+        "pecho": "Pecho", "hombros": "Hombros", "hombros_frontal": "Hombro Frontal", "hombros_posterior": "Hombro Posterior",
+        "biceps": "Bíceps", "triceps": "Tríceps", "antebrazo": "Antebrazo",
+        "abs": "Abs", "oblicuos": "Abs", "core": "Abs", "core_inferior": "Abs",
+        "cardio": "Varios", "cardiovascular": "Varios", "full_body": "Varios", "hiit": "Varios"
+    };
+
+    let mainMuscle = 'General';
+    if (ex.mInfo?.main) mainMuscle = ex.mInfo.main;
+    else if (exData) {
+        if (exData.target && MAP[exData.target]) mainMuscle = MAP[exData.target];
+        else mainMuscle = exData.m;
+    } else if (fallbackData && fallbackData.mInfo && fallbackData.mInfo.main) {
+        mainMuscle = fallbackData.mInfo.main;
+    }
+
+    const secMuscles = exData?.sec && exData.sec.length ? exData.sec : (ex.mInfo?.sec || fallbackData.mInfo.sec || []);
 
     const mainPct = isIsolated ? BIOMECH_ISOLATED : BIOMECH_COMPOUND;
     const remaining = parseFloat((1 - mainPct).toFixed(2));
@@ -944,14 +974,6 @@ function calcBiomechanicalWeights(ex) {
             const pct = (secWeights[idx] / totalWeight) * remaining;
             if (pct >= 0.02) {  // omitir músculos con < 2%
                 // Mapear algunos nombres secundarios (que puedan venir del JSON) a los nombres de la UI ("mInfo.main")
-                const MAP = {
-                    "cuadriceps": "Cuádriceps", "isquios": "Isquios", "gluteos": "Glúteos", "abductores": "Abductores", "aductores": "Aductores", "gemelos": "Gemelos",
-                    "dorsales": "Dorsales", "espalda_alta": "Espalda Alta", "espalda_baja": "Espalda Baja",
-                    "pecho": "Pecho", "hombros": "Hombros", "hombros_frontal": "Hombros", "hombros_posterior": "Hombros",
-                    "biceps": "Bíceps", "triceps": "Tríceps", "antebrazo": "Antebrazo",
-                    "abs": "Abs", "oblicuos": "Abs", "core": "Abs", "core_inferior": "Abs",
-                    "cardio": "Varios", "cardiovascular": "Varios", "full_body": "Varios", "hiit": "Varios"
-                };
                 const finalName = MAP[sec] || sec;
 
                 result[finalName] = (result[finalName] || 0) + pct;
@@ -1137,23 +1159,15 @@ window.closeTimer = () => { clearInterval(timerInt); window.closeModal('modal-ti
 window.addRestTime = (s) => { restEndTime += (s * 1000); if (s > 0) totalRestTime += s; const now = Date.now(); const left = Math.ceil((restEndTime - now) / 1000); updateTimerVisuals(left); };
 function startTimerMini() { if (durationInt) clearInterval(durationInt); const d = document.getElementById('mini-timer'); const barD = document.getElementById('bar-timer'); if (!activeWorkout || !activeWorkout.startTime) return; durationInt = setInterval(() => { const diff = Math.floor((Date.now() - activeWorkout.startTime) / 1000); const m = Math.floor(diff / 60); const s = diff % 60; const txt = `${m}:${s.toString().padStart(2, '0')}`; if (d) d.innerText = txt; if (barD) barD.innerText = txt; }, 1000); }
 window.promptRPE = () => {
-    const muscleCounts = { "Pecho": 0, "Espalda": 0, "Pierna": 0, "Hombros": 0, "Brazos": 0, "Abs": 0 };
+    const muscleCounts = {};
     if (activeWorkout && activeWorkout.exs) {
         activeWorkout.exs.forEach(e => {
             const completedSets = e.sets?.filter(s => s.d).length || 0;
             if (completedSets > 0) {
                 const weights = calcBiomechanicalWeights(e);
                 for (const [mName, wVal] of Object.entries(weights)) {
-                    let key = "";
-                    if (["Pecho", "Espalda Alta", "Dorsales", "Espalda Baja", "Hombros", "Abs"].includes(mName)) {
-                        key = mName === "Espalda Alta" || mName === "Dorsales" || mName === "Espalda Baja" ? "Espalda" : mName;
-                    }
-                    else if (["Cuádriceps", "Isquios", "Glúteos", "Gemelos", "Abductores", "Aductores"].includes(mName)) key = "Pierna";
-                    else if (["Bíceps", "Tríceps", "Antebrazo"].includes(mName)) key = "Brazos";
-
-                    if (key && muscleCounts.hasOwnProperty(key)) {
-                        muscleCounts[key] += (wVal * completedSets);
-                    }
+                    if (mName === 'General' || mName === 'Varios') continue;
+                    muscleCounts[mName] = (muscleCounts[mName] || 0) + (wVal * completedSets);
                 }
             }
         });
@@ -1213,11 +1227,8 @@ window.finishWorkout = async (rpeVal) => {
                 // Guardar la distribución biomecánica en vez de solo 1 al principal
                 const weights = calcBiomechanicalWeights(e);
                 for (const [mName, wVal] of Object.entries(weights)) {
-                    // Mapeo seguro a los campos esperados en la DB si vienen de secundarios raros
-                    let finalName = mName === "Espalda Alta" || mName === "Dorsales" || mName === "Espalda Baja" ? "Espalda" : mName;
-                    if (finalName === "Abductores" || finalName === "Aductores") finalName = "Pierna"; // simplificación por seguridad db
-
-                    muscleCounts[finalName] = (muscleCounts[finalName] || 0) + wVal;
+                    if (mName === 'General' || mName === 'Varios') continue;
+                    muscleCounts[mName] = (muscleCounts[mName] || 0) + wVal;
                 }
 
                 // Actualizar Record de Serie en memoria

@@ -218,24 +218,7 @@ input:focus {
   box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
 }
 
-/* Floating Action Button (FAB) */
-.btn-float {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  background: var(--accent-color);
-  color: white;
-  display: grid;
-  place-items: center;
-  font-size: 28px;
-  box-shadow: var(--accent-glow);
-  /* Variable usada aquí también */
-  z-index: 1000;
-  cursor: pointer;
-}
+/* Floating Action Button (FAB) OLD - Removed for central nav FAB */
 
 /* === NOTIFICACIONES & LOADING === */
 #toast-container {
@@ -437,28 +420,6 @@ input:focus {
   display: flex;
   gap: 20px;
   align-items: center;
-}
-
-.top-nav-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  cursor: pointer;
-  color: #555;
-}
-
-.top-icon {
-  font-size: 1.2rem;
-}
-
-.top-label {
-  font-size: 0.5rem;
-  font-weight: bold;
-  text-transform: uppercase;
-}
-
-.top-nav-item.active {
-  color: var(--accent-color);
 }
 
 .notif-badge {
