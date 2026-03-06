@@ -111,61 +111,6 @@
             </div>
         </section>
 
-        <!-- DASHBOARD HOME VIEW -->
-        <section id="home-view" class="view-container">
-            <div style="margin-top: 10px; margin-bottom: 25px;">
-                <h1 style="font-size: 1.8rem; font-family: var(--font-sport); margin: 0; color: white;">
-                    ¡Buenos días, <span id="home-username" style="color: var(--accent-color);">Atleta</span>!
-                </h1>
-                <p style="color: #888; font-size: 0.9rem;">Bienvenido a tu panel de control</p>
-            </div>
-
-            <h3 style="margin-bottom: 10px; font-size: 1.1rem; color: #ccc;">Mis herramientas</h3>
-            <div class="home-grid">
-
-                <div class="home-card" onclick="window.switchTab('routines-view')">
-                    <div class="h-icon" style="color: var(--accent-color);">📝</div>
-                    <div class="h-title">Mis Rutinas</div>
-                    <div class="h-sub">Ver planes diarios</div>
-                </div>
-
-                <div class="home-card"
-                    onclick="window.switchTab('profile-view'); window.switchProfileSubTab('history');">
-                    <div class="h-icon" style="color: #ffaa00;">📖</div>
-                    <div class="h-title">Historial</div>
-                    <div class="h-sub">Entrenos pasados</div>
-                </div>
-
-                <div class="home-card"
-                    onclick="window.switchTab('profile-view'); window.switchProfileSubTab('progress');">
-                    <div class="h-icon" style="color: #00ff88;">📈</div>
-                    <div class="h-title">Progreso</div>
-                    <div class="h-sub">Métricas y gráficas</div>
-                </div>
-
-                <div class="home-card"
-                    onclick="window.switchTab('profile-view'); window.switchProfileSubTab('settings');">
-                    <div class="h-icon" style="color: #3357ff;">👤</div>
-                    <div class="h-title">Mi Perfil</div>
-                    <div class="h-sub">Ajustes de cuenta</div>
-                </div>
-
-                <div class="home-card" onclick="window.switchTab('help-view')">
-                    <div class="h-icon" style="color: #a133ff;">💡</div>
-                    <div class="h-title">Instrucciones</div>
-                    <div class="h-sub">Guía de uso APP</div>
-                </div>
-
-                <div class="home-card" id="home-card-sub" onclick="window.openModal('modal-subscription-user')"
-                    style="display:none; border-color: rgba(255,255,255,0.2);">
-                    <div class="h-icon" style="color: white; text-shadow: 0 0 10px white;">💎</div>
-                    <div class="h-title">Mi Plan</div>
-                    <div class="h-sub">Suscripción actual</div>
-                </div>
-
-            </div>
-        </section>
-
         <section id="routines-view" class="view-container">
             <h2>MIS RUTINAS</h2>
             <div id="routines-list"></div>
